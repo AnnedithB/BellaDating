@@ -1,0 +1,101 @@
+{
+  "common": {
+    "buttons": {
+      "submit": "Soumettre",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "delete": "Supprimer",
+      "edit": "Modifier",
+      "close": "Fermer",
+      "back": "Retour",
+      "next": "Suivant",
+      "previous": "Précédent",
+      "confirm": "Confirmer",
+      "retry": "Réessayer",
+      "refresh": "Actualiser",
+      "loading": "Chargement...",
+      "search": "Rechercher",
+      "filter": "Filtrer",
+      "sort": "Trier",
+      "clear": "Effacer",
+      "apply": "Appliquer"
+    },
+    "status": {
+      "online": "En ligne",
+      "offline": "Hors ligne",
+      "in_call": "En appel",
+      "queuing": "Recherche de correspondance",
+      "away": "Absent",
+      "busy": "Occupé"
+    },
+    "navigation": {
+      "home": "Accueil",
+      "profile": "Profil",
+      "settings": "Paramètres",
+      "help": "Aide",
+      "about": "À propos",
+      "contact": "Contact",
+      "privacy": "Confidentialité",
+      "terms": "Conditions d'utilisation",
+      "logout": "Se déconnecter",
+      "login": "Se connecter",
+      "signup": "S'inscrire"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Bon retour",
+      "subtitle": "Connectez-vous pour continuer vos connexions",
+      "email_label": "Adresse e-mail",
+      "email_placeholder": "Entrez votre e-mail",
+      "password_label": "Mot de passe",
+      "password_placeholder": "Entrez votre mot de passe",
+      "remember_me": "Se souvenir de moi",
+      "forgot_password": "Mot de passe oublié ?",
+      "login_button": "Se connecter",
+      "signup_link": "Pas de compte ? Inscrivez-vous",
+      "logging_in": "Connexion..."
+    },
+    "signup": {
+      "title": "Rejoignez Real-time Connect",
+      "subtitle": "Créez votre compte pour commencer à rencontrer des gens",
+      "username_label": "Nom d'utilisateur",
+      "username_placeholder": "Choisissez un nom d'utilisateur",
+      "email_label": "Adresse e-mail",
+      "email_placeholder": "Entrez votre e-mail",
+      "password_label": "Mot de passe",
+      "password_placeholder": "Créez un mot de passe",
+      "signup_button": "Créer un compte",
+      "login_link": "Déjà un compte ? Connectez-vous",
+      "creating_account": "Création du compte..."
+    }
+  },
+  "profile": {
+    "setup": {
+      "title": "Configurez votre profil",
+      "subtitle": "Parlez-nous de vous pour trouver de meilleures correspondances",
+      "display_name_label": "Nom d'affichage",
+      "bio_label": "Biographie courte",
+      "intent_friendship": "Amitié",
+      "intent_dating": "Rencontres",
+      "intent_casual": "Discussion décontractée"
+    }
+  },
+  "matching": {
+    "queue": {
+      "title": "Recherche de correspondance",
+      "subtitle": "Nous trouvons quelqu'un avec qui vous connecter",
+      "searching": "Recherche de correspondances...",
+      "cancel": "Annuler la recherche"
+    }
+  },
+  "chat": {
+    "interface": {
+      "type_message": "Tapez votre message...",
+      "send_message": "Envoyer",
+      "voice_note": "Note vocale",
+      "send_photo": "Envoyer une photo",
+      "start_video_call": "Démarrer un appel vidéo"
+    }
+  }
+}

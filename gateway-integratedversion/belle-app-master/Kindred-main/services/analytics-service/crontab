@@ -1,0 +1,12 @@
+# ETL Pipeline crontab
+# Run daily KPI aggregation at 1 AM UTC
+0 1 * * * cd /app/services/analytics-service && node dist/etl/runner.js daily_kpi >> /var/log/cron/etl.log 2>&1
+
+# Run hourly behavior events at minute 5 of every hour
+5 * * * * cd /app/services/analytics-service && node dist/etl/runner.js hourly_behavior >> /var/log/cron/etl.log 2>&1
+
+# Run weekly retention analysis every Monday at 2 AM UTC
+0 2 * * 1 cd /app/services/analytics-service && node dist/etl/runner.js weekly_retention >> /var/log/cron/etl.log 2>&1
+
+# Run session analytics every 15 minutes
+*/15 * * * * cd /app/services/analytics-service && node dist/etl/runner.js session_analytics >> /var/log/cron/etl.log 2>&1

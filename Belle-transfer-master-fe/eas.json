@@ -1,0 +1,64 @@
+{
+  "cli": {
+    "version": ">= 16.28.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "node": "20.19.4"
+    },
+    "preview": {
+      "distribution": "store",
+      "autoIncrement": true,
+      "env": {
+        "APP_VARIANT": "preview",
+        "API_URL": "http://51.20.160.210:4000",
+        "USER_SERVICE_URL": "http://51.20.160.210:3001",
+        "WS_URL": "ws://51.20.160.210:3005",
+        "COMMUNICATION_SERVICE_URL": "http://51.20.160.210:3005",
+        "INTERACTION_SERVICE_URL": "ws://51.20.160.210:3003",
+        "SUBSCRIPTION_SERVICE_URL": "http://51.20.160.210:3010",
+        "NOTIFICATION_SERVICE_URL": "http://51.20.160.210:3006",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "798669264443-b8haj6pkpsd84q3jmmnnt7u3gngejtc9.apps.googleusercontent.com"
+      },
+      "node": "20.19.4",  
+      "ios": {
+        "simulator": false,
+        "buildConfiguration": "Release"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "node": "20.19.4",
+      "env": {
+        "APP_VARIANT": "production",
+        "API_URL": "http://51.20.160.210:4000",
+        "USER_SERVICE_URL": "http://51.20.160.210:3001",
+        "WS_URL": "ws://51.20.160.210:3005",
+        "COMMUNICATION_SERVICE_URL": "http://51.20.160.210:3005",
+        "INTERACTION_SERVICE_URL": "ws://51.20.160.210:3003",
+        "SUBSCRIPTION_SERVICE_URL": "http://51.20.160.210:3010",
+        "NOTIFICATION_SERVICE_URL": "http://51.20.160.210:3006",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "798669264443-b8haj6pkpsd84q3jmmnnt7u3gngejtc9.apps.googleusercontent.com"
+      },
+      "ios": {
+        "simulator": false
+      }
+    }
+  },
+  "submit": {
+    "preview": {
+      "ios": {
+        "ascAppId": "df48fbae-188d-482f-b6bc-c3ba3319b768"
+      }
+    },
+    "production": {
+      "ios": {
+        "ascAppId": "df48fbae-188d-482f-b6bc-c3ba3319b768"
+      }
+    }
+  }
+}
+

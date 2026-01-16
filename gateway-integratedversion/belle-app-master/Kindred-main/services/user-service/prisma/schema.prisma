@@ -1,0 +1,523 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Users table
+model User {
+  id            String    @id @default(uuid())
+  username      String    @unique @db.VarChar(50)
+  email         String    @unique @db.VarChar(255)
+  passwordHash  String    @map("password_hash") @db.VarChar(255)
+  gender        UserRole  @default(MALE)
+  permissionRole PermissionRole @default(USER) @map("permission_role")
+  emailVerified Boolean   @default(false) @map("email_verified")
+  isActive      Boolean   @default(true) @map("is_active")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  lastLogin     DateTime? @map("last_login")
+
+  // Relationships
+  profile      Profile?
+  sessions     UserSession[]
+  interactions InteractionLog[] @relation("UserInteractions")
+  connections1 Connection[]     @relation("User1Connections")
+  connections2 Connection[]     @relation("User2Connections")
+  messages     Message[]
+  readStatuses MessageReadStatus[]
+  
+  // Safety & Reporting relationships
+  reportsSubmitted  UserReport[]       @relation("ReporterReports")
+  reportsReceived   UserReport[]       @relation("ReportedUserReports")
+  blocksCreated     UserBlock[]        @relation("BlockerBlocks")
+  blocksReceived    UserBlock[]        @relation("BlockedUserBlocks")
+  safetyProfile     UserSafetyProfile?
+  appeals           UserAppeal[]
+
+  @@map("users")
+}
+
+// Profiles table
+model Profile {
+  id              String  @id @default(uuid())
+  userId          String  @unique @map("user_id")
+  displayName     String  @map("display_name") @db.VarChar(100)
+  shortBio        String? @map("short_bio") @db.Text
+  photos          Json    @default("[]")
+  videos          Json    @default("[]")
+  intent          Intent  @default(CASUAL)
+  age             Int?
+  locationCity    String? @map("location_city") @db.VarChar(100)
+  locationCountry String? @map("location_country") @db.VarChar(100)
+  preferences     Json    @default("{}")
+  
+  // User's own dating attributes
+  gender                    Gender?   @map("gender")
+  relationshipIntents       RelationshipIntent[] @map("relationship_intents")
+  familyPlans              FamilyPlans? @map("family_plans")
+  religion                 Religion? @map("religion")
+  educationLevel           EducationLevel? @map("education_level")
+  politicalViews           PoliticalView? @map("political_views")
+  exercise                 LifestyleHabit? @map("exercise")
+  smoking                  LifestyleHabit? @map("smoking")
+  drinking                 LifestyleHabit? @map("drinking")
+  
+  // User's preferences for a partner
+  preferredGenders                 Gender[] @map("preferred_genders")
+  preferredRelationshipIntents     RelationshipIntent[] @map("preferred_relationship_intents")
+  preferredFamilyPlans            FamilyPlans[] @map("preferred_family_plans")
+  preferredReligions              Religion[] @map("preferred_religions")
+  preferredEducationLevels        EducationLevel[] @map("preferred_education_levels")
+  preferredPoliticalViews         PoliticalView[] @map("preferred_political_views")
+  preferredExerciseHabits         LifestyleHabit[] @map("preferred_exercise_habits")
+  preferredSmokingHabits          LifestyleHabit[] @map("preferred_smoking_habits")
+  preferredDrinkingHabits         LifestyleHabit[] @map("preferred_drinking_habits")
+  
+  // Age preference range
+  preferredMinAge         Int? @map("preferred_min_age")
+  preferredMaxAge         Int? @map("preferred_max_age")
+  
+  // Premium features flag for future monetization
+  isPremium               Boolean @default(false) @map("is_premium")
+  
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+// User sessions table
+model UserSession {
+  id        String      @id @default(uuid())
+  userId    String      @map("user_id")
+  socketId  String?     @map("socket_id") @db.VarChar(255)
+  status    UserStatus  @default(OFFLINE)
+  ipAddress String?     @map("ip_address") @db.Inet
+  userAgent String?     @map("user_agent") @db.Text
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+  expiresAt DateTime?   @map("expires_at")
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_sessions")
+}
+
+// Interaction logs table
+model InteractionLog {
+  id              String            @id @default(uuid())
+  user1Id         String            @map("user1_id")
+  user2Id         String            @map("user2_id")
+  roomId          String            @map("room_id") @db.VarChar(255)
+  interactionType InteractionType   @default(VOICE_CALL) @map("interaction_type")
+  startedAt       DateTime          @default(now()) @map("started_at")
+  endedAt         DateTime?         @map("ended_at")
+  durationSeconds Int               @default(0) @map("duration_seconds")
+  outcome         InteractionOutcome @default(NO_ACTION)
+  femaleUserId    String?           @map("female_user_id")
+  metadata        Json              @default("{}")
+
+  // Relationships
+  user1       User         @relation("UserInteractions", fields: [user1Id], references: [id], onDelete: Cascade)
+  connections Connection[]
+
+  @@map("interaction_logs")
+}
+
+// Connections table
+model Connection {
+  id               String         @id @default(uuid())
+  user1Id          String         @map("user1_id")
+  user2Id          String         @map("user2_id")
+  interactionLogId String         @map("interaction_log_id")
+  femaleUserId     String         @map("female_user_id")
+  connectionType   ConnectionType @default(CHAT_ONLY) @map("connection_type")
+  isActive         Boolean        @default(true) @map("is_active")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  // Relationships
+  user1          User            @relation("User1Connections", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2          User            @relation("User2Connections", fields: [user2Id], references: [id], onDelete: Cascade)
+  interactionLog InteractionLog  @relation(fields: [interactionLogId], references: [id], onDelete: Cascade)
+  chatRoom       ChatRoom?
+  videoRequests  VideoRequest[]
+
+  @@unique([user1Id, user2Id])
+  @@map("connections")
+}
+
+// Video requests table
+model VideoRequest {
+  id              String             @id @default(uuid())
+  connectionId    String             @map("connection_id")
+  requesterUserId String             @map("requester_user_id")
+  approverUserId  String             @map("approver_user_id")
+  status          VideoRequestStatus @default(PENDING)
+  requestedAt     DateTime           @default(now()) @map("requested_at")
+  respondedAt     DateTime?          @map("responded_at")
+  expiresAt       DateTime           @default(dbgenerated("(CURRENT_TIMESTAMP + INTERVAL '24 hours')")) @map("expires_at")
+  metadata        Json               @default("{}")
+
+  // Relationships
+  connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@map("video_requests")
+}
+
+// Chat rooms table
+model ChatRoom {
+  id           String   @id @default(uuid())
+  connectionId String   @unique @map("connection_id")
+  roomName     String   @map("room_name") @db.VarChar(255)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  messages   Message[]
+
+  @@map("chat_rooms")
+}
+
+// Messages table
+model Message {
+  id           String      @id @default(uuid())
+  chatRoomId   String      @map("chat_room_id")
+  senderUserId String      @map("sender_user_id")
+  content      String      @db.Text
+  messageType  MessageType @default(TEXT) @map("message_type")
+  metadata     Json        @default("{}")
+  isEdited     Boolean     @default(false) @map("is_edited")
+  isDeleted    Boolean     @default(false) @map("is_deleted")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  // Relationships
+  chatRoom    ChatRoom            @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  sender      User                @relation(fields: [senderUserId], references: [id], onDelete: Cascade)
+  readStatuses MessageReadStatus[]
+
+  @@map("messages")
+}
+
+// Message read status table
+model MessageReadStatus {
+  id        String   @id @default(uuid())
+  messageId String   @map("message_id")
+  userId    String   @map("user_id")
+  readAt    DateTime @default(now()) @map("read_at")
+
+  // Relationships
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@map("message_read_status")
+}
+
+// Verification tokens for email verification and password reset
+model VerificationToken {
+  id        String            @id @default(uuid())
+  userId    String            @map("user_id")
+  token     String            @unique @db.VarChar(255)
+  type      VerificationTokenType
+  expiresAt DateTime          @map("expires_at")
+  usedAt    DateTime?         @map("used_at")
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  @@index([token])
+  @@index([userId, type])
+  @@map("verification_tokens")
+}
+
+enum VerificationTokenType {
+  EMAIL_VERIFICATION @map("email_verification")
+  PASSWORD_RESET     @map("password_reset")
+
+  @@map("VerificationTokenType")
+}
+
+// Enums
+enum UserRole {
+  MALE   @map("male")
+  FEMALE @map("female")
+  ADMIN  @map("admin")
+
+  @@map("UserRole")
+}
+
+enum PermissionRole {
+  USER  @map("user")
+  ADMIN @map("admin")
+
+  @@map("PermissionRole")
+}
+
+enum UserStatus {
+  ONLINE  @map("online")
+  OFFLINE @map("offline")
+  IN_CALL @map("in-call")
+  QUEUING @map("queuing")
+
+  @@map("UserStatus")
+}
+
+enum Intent {
+  CASUAL      @map("casual")
+  FRIENDS     @map("friends")
+  SERIOUS     @map("serious")
+  NETWORKING  @map("networking")
+
+  @@map("Intent")
+}
+
+enum InteractionType {
+  VOICE_CALL @map("voice_call")
+  VIDEO_CALL @map("video_call")
+
+  @@map("InteractionType")
+}
+
+enum InteractionOutcome {
+  NO_ACTION        @map("no_action")
+  FEMALE_CONNECTED @map("female_connected")
+  BOTH_LEFT        @map("both_left")
+  TIMEOUT          @map("timeout")
+
+  @@map("InteractionOutcome")
+}
+
+enum ConnectionType {
+  CHAT_ONLY     @map("chat_only")
+  VIDEO_ENABLED @map("video_enabled")
+
+  @@map("ConnectionType")
+}
+
+enum VideoRequestStatus {
+  PENDING  @map("pending")
+  APPROVED @map("approved")
+  REJECTED @map("rejected")
+  EXPIRED  @map("expired")
+
+  @@map("VideoRequestStatus")
+}
+
+enum MessageType {
+  TEXT   @map("text")
+  IMAGE  @map("image")
+  VIDEO  @map("video")
+  VOICE  @map("voice")
+  SYSTEM @map("system")
+
+  @@map("MessageType")
+}
+
+// Dating-specific Enums
+enum Gender {
+  MAN        @map("man")
+  WOMAN      @map("woman")
+  NONBINARY  @map("nonbinary")
+
+  @@map("Gender")
+}
+
+enum RelationshipIntent {
+  LONG_TERM                 @map("long_term")
+  CASUAL_DATES             @map("casual_dates")
+  MARRIAGE                 @map("marriage")
+  INTIMACY                 @map("intimacy")
+  INTIMACY_NO_COMMITMENT   @map("intimacy_no_commitment")
+  LIFE_PARTNER             @map("life_partner")
+  ETHICAL_NON_MONOGAMY     @map("ethical_non_monogamy")
+
+  @@map("RelationshipIntent")
+}
+
+enum FamilyPlans {
+  HAS_KIDS_WANTS_MORE          @map("has_kids_wants_more")
+  HAS_KIDS_DOESNT_WANT_MORE    @map("has_kids_doesnt_want_more")
+  DOESNT_HAVE_KIDS_WANTS_KIDS  @map("doesnt_have_kids_wants_kids")
+  DOESNT_HAVE_KIDS_DOESNT_WANT_KIDS @map("doesnt_have_kids_doesnt_want_kids")
+  NOT_SURE_YET                 @map("not_sure_yet")
+
+  @@map("FamilyPlans")
+}
+
+enum Religion {
+  AGNOSTIC   @map("agnostic")
+  ATHEIST    @map("atheist")
+  BUDDHIST   @map("buddhist")
+  CATHOLIC   @map("catholic")
+  CHRISTIAN  @map("christian")
+  HINDU      @map("hindu")
+  JEWISH     @map("jewish")
+  MUSLIM     @map("muslim")
+  SPIRITUAL  @map("spiritual")
+  OTHER      @map("other")
+
+  @@map("Religion")
+}
+
+enum EducationLevel {
+  HIGH_SCHOOL    @map("high_school")
+  IN_COLLEGE     @map("in_college")
+  UNDERGRADUATE  @map("undergraduate")
+  IN_GRAD_SCHOOL @map("in_grad_school")
+  POSTGRADUATE   @map("postgraduate")
+
+  @@map("EducationLevel")
+}
+
+enum PoliticalView {
+  LIBERAL      @map("liberal")
+  MODERATE     @map("moderate")
+  CONSERVATIVE @map("conservative")
+  APOLITICAL   @map("apolitical")
+  OTHER        @map("other")
+
+  @@map("PoliticalView")
+}
+
+enum LifestyleHabit {
+  FREQUENTLY @map("frequently")
+  SOCIALLY   @map("socially")
+  RARELY     @map("rarely")
+  NEVER      @map("never")
+
+  @@map("LifestyleHabit")
+}
+
+// Safety & Reporting Models
+
+// User Reports table
+model UserReport {
+  id             String       @id @default(uuid())
+  reporterId     String       @map("reporter_id")
+  reportedUserId String       @map("reported_user_id")
+  reportType     String       @map("report_type")
+  description    String       @db.Text
+  evidence       String[]     @default([])
+  sessionId      String?      @map("session_id")
+  messageId      String?      @map("message_id")
+  status         ReportStatus @default(PENDING)
+  priority       ReportPriority @default(MEDIUM)
+  adminResponse  String?      @map("admin_response") @db.Text
+  reviewedBy     String?      @map("reviewed_by")
+  reviewedAt     DateTime?    @map("reviewed_at")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  // Relationships
+  reporter       User         @relation("ReporterReports", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedUser   User         @relation("ReportedUserReports", fields: [reportedUserId], references: [id], onDelete: Cascade)
+
+  @@map("user_reports")
+}
+
+// User Blocks table
+model UserBlock {
+  id            String   @id @default(uuid())
+  blockerId     String   @map("blocker_id")
+  blockedUserId String   @map("blocked_user_id")
+  reason        String?  @db.Text
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  // Relationships
+  blocker       User     @relation("BlockerBlocks", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedUser   User     @relation("BlockedUserBlocks", fields: [blockedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedUserId])
+  @@map("user_blocks")
+}
+
+// User Safety Profiles table
+model UserSafetyProfile {
+  id                String        @id @default(uuid())
+  userId            String        @unique @map("user_id")
+  trustScore        Float         @default(100.0) @map("trust_score")
+  status            SafetyStatus  @default(GOOD_STANDING)
+  reportsReceived   Int           @default(0) @map("reports_received")
+  reportsMade       Int           @default(0) @map("reports_made")
+  recentReports     Int           @default(0) @map("recent_reports") // Last 30 days
+  restrictionReason String?       @map("restriction_reason") @db.Text
+  restrictedUntil   DateTime?     @map("restricted_until")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  // Relationships
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_safety_profiles")
+}
+
+// User Appeals table
+model UserAppeal {
+  id            String        @id @default(uuid())
+  userId        String        @map("user_id")
+  appealReason  String        @map("appeal_reason") @db.Text
+  evidence      String[]      @default([])
+  status        AppealStatus  @default(PENDING)
+  reviewedBy    String?       @map("reviewed_by")
+  reviewedAt    DateTime?     @map("reviewed_at")
+  adminResponse String?       @map("admin_response") @db.Text
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  // Relationships
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_appeals")
+}
+
+// Safety-related Enums
+enum ReportStatus {
+  PENDING     @map("pending")
+  REVIEWING   @map("reviewing")
+  RESOLVED    @map("resolved")
+  REJECTED    @map("rejected")
+  ESCALATED   @map("escalated")
+
+  @@map("ReportStatus")
+}
+
+enum ReportPriority {
+  LOW      @map("low")
+  MEDIUM   @map("medium")
+  HIGH     @map("high")
+  URGENT   @map("urgent")
+
+  @@map("ReportPriority")
+}
+
+enum SafetyStatus {
+  GOOD_STANDING @map("good_standing")
+  WARNING       @map("warning")
+  RESTRICTED    @map("restricted")
+  BANNED        @map("banned")
+
+  @@map("SafetyStatus")
+}
+
+enum AppealStatus {
+  PENDING   @map("pending")
+  REVIEWING @map("reviewing")
+  APPROVED  @map("approved")
+  DENIED    @map("denied")
+
+  @@map("AppealStatus")
+}

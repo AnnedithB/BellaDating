@@ -1,0 +1,391 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Admin {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  passwordHash String
+  firstName    String
+  lastName     String
+  role         AdminRole    @default(MODERATOR)
+  permissions  Permission[]
+  isActive     Boolean      @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  // Admin actions for audit trail
+  moderationActions ModerationAction[]
+  adminLogs         AdminLog[]
+
+  // Support system relationships
+  assignedTickets       SupportTicket[]        @relation("TicketAssignment")
+  escalatedTickets      SupportTicket[]        @relation("TicketEscalation")
+  ticketComments        TicketComment[]
+  ticketAttachments     TicketAttachment[]
+  createdTags           TicketTag[]
+  knowledgeBaseArticles KnowledgeBaseArticle[]
+  editedArticles        KnowledgeBaseArticle[] @relation("ArticleEditor")
+  supportMetrics        SupportMetrics[]
+  UserReport            UserReport[]
+
+  @@map("admins")
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  MODERATOR
+  SUPPORT
+}
+
+model Permission {
+  id          String @id @default(cuid())
+  name        String @unique
+  description String
+  category    String
+
+  admins Admin[]
+
+  @@map("permissions")
+}
+
+model ModerationAction {
+  id      String @id @default(cuid())
+  adminId String
+  admin   Admin  @relation(fields: [adminId], references: [id])
+
+  targetType ModerationTarget
+  targetId   String
+  action     ModerationActionType
+  reason     String
+  details    Json?
+  severity   ModerationSeverity   @default(LOW)
+
+  createdAt DateTime @default(now())
+
+  @@map("moderation_actions")
+}
+
+enum ModerationTarget {
+  USER
+  REPORT
+  CONTENT
+  CONVERSATION
+}
+
+enum ModerationActionType {
+  WARN
+  SUSPEND
+  BAN
+  DELETE
+  APPROVE
+  REJECT
+  REVIEW
+}
+
+enum ModerationSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model UserReport {
+  id             String         @id @default(cuid())
+  reporterUserId String
+  reportedUserId String
+  reportType     ReportType
+  reason         String
+  description    String?
+  evidence       Json? // Screenshots, chat logs, etc.
+  status         ReportStatus   @default(PENDING)
+  priority       ReportPriority @default(MEDIUM)
+
+  assignedAdminId String?
+  assignedAdmin   Admin?  @relation(fields: [assignedAdminId], references: [id])
+
+  resolution String?
+  resolvedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@map("user_reports")
+}
+
+enum ReportType {
+  INAPPROPRIATE_BEHAVIOR
+  HARASSMENT
+  FAKE_PROFILE
+  SPAM
+  UNDERAGE
+  VIOLENCE_THREAT
+  SEXUAL_CONTENT
+  HATE_SPEECH
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  IN_REVIEW
+  RESOLVED
+  DISMISSED
+  ESCALATED
+}
+
+enum ReportPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+model AdminLog {
+  id      String @id @default(cuid())
+  adminId String
+  admin   Admin  @relation(fields: [adminId], references: [id])
+
+  action    String
+  resource  String
+  details   Json?
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@map("admin_logs")
+}
+
+model SystemSettings {
+  id          String  @id @default(cuid())
+  key         String  @unique
+  value       Json
+  description String?
+  category    String
+  isPublic    Boolean @default(false)
+
+  updatedBy String
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+// =======================================
+// CUSTOMER SUPPORT SYSTEM
+// =======================================
+
+model SupportTicket {
+  id           String         @id @default(cuid())
+  ticketNumber String         @unique
+  subject      String
+  description  String
+  category     TicketCategory
+  priority     TicketPriority @default(MEDIUM)
+  status       TicketStatus   @default(OPEN)
+
+  // Customer information
+  customerId    String
+  customerEmail String
+  customerName  String?
+
+  // Assignment
+  assignedAdminId String?
+  assignedAdmin   Admin?  @relation("TicketAssignment", fields: [assignedAdminId], references: [id])
+
+  // Tracking
+  isEscalated    Boolean   @default(false)
+  escalatedAt    DateTime?
+  escalatedBy    String?
+  escalatedAdmin Admin?    @relation("TicketEscalation", fields: [escalatedBy], references: [id])
+
+  // Timing
+  firstResponseAt DateTime?
+  resolvedAt      DateTime?
+  closedAt        DateTime?
+  dueDate         DateTime?
+
+  // Metrics
+  responseTimeHours   Float?
+  resolutionTimeHours Float?
+  customerRating      Int? // 1-5 stars
+
+  // Relationships
+  comments    TicketComment[]
+  attachments TicketAttachment[]
+  tags        TicketTag[]
+
+  // Audit
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String? // If created by admin
+
+  @@index([status])
+  @@index([priority])
+  @@index([category])
+  @@index([assignedAdminId])
+  @@index([customerId])
+  @@index([createdAt])
+  @@map("support_tickets")
+}
+
+model TicketComment {
+  id       String        @id @default(cuid())
+  ticketId String
+  ticket   SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  content        String
+  isInternal     Boolean @default(false)
+  isFromCustomer Boolean @default(false)
+
+  // Author information
+  authorId    String?
+  authorAdmin Admin?  @relation(fields: [authorId], references: [id])
+  authorEmail String? // For customer comments
+  authorName  String?
+
+  // Attachments
+  attachments TicketAttachment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ticketId])
+  @@index([createdAt])
+  @@map("ticket_comments")
+}
+
+model TicketAttachment {
+  id           String @id @default(cuid())
+  filename     String
+  originalName String
+  mimeType     String
+  fileSize     Int
+  filePath     String
+
+  // Relationships
+  ticketId  String?
+  ticket    SupportTicket? @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  commentId String?
+  comment   TicketComment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  uploadedBy    String
+  uploadedAdmin Admin  @relation(fields: [uploadedBy], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@map("ticket_attachments")
+}
+
+model TicketTag {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  color       String  @default("#6B7280")
+  description String?
+
+  tickets SupportTicket[]
+
+  createdAt      DateTime @default(now())
+  createdBy      String
+  createdByAdmin Admin    @relation(fields: [createdBy], references: [id])
+
+  @@map("ticket_tags")
+}
+
+model KnowledgeBaseArticle {
+  id       String   @id @default(cuid())
+  title    String
+  content  String
+  summary  String?
+  category String
+  tags     String[]
+
+  // Publishing
+  isPublished Boolean   @default(false)
+  publishedAt DateTime?
+
+  // SEO and search
+  slug           String   @unique
+  searchKeywords String[]
+
+  // Metrics
+  viewCount       Int @default(0)
+  helpfulVotes    Int @default(0)
+  notHelpfulVotes Int @default(0)
+
+  // Authoring
+  authorId     String
+  author       Admin   @relation(fields: [authorId], references: [id])
+  lastEditedBy String?
+  lastEditor   Admin?  @relation("ArticleEditor", fields: [lastEditedBy], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([category])
+  @@index([isPublished])
+  @@index([slug])
+  @@map("knowledge_base_articles")
+}
+
+model SupportMetrics {
+  id   String   @id @default(cuid())
+  date DateTime @db.Date
+
+  // Ticket volume
+  ticketsCreated   Int @default(0)
+  ticketsResolved  Int @default(0)
+  ticketsClosed    Int @default(0)
+  ticketsEscalated Int @default(0)
+
+  // Response times
+  avgFirstResponseHours  Float?
+  avgResolutionTimeHours Float?
+
+  // Agent performance
+  agentId String?
+  agent   Admin?  @relation(fields: [agentId], references: [id])
+
+  // Customer satisfaction
+  avgCustomerRating Float?
+  totalRatings      Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([date, agentId])
+  @@index([date])
+  @@index([agentId])
+  @@map("support_metrics")
+}
+
+enum TicketCategory {
+  TECHNICAL
+  BILLING
+  ACCOUNT
+  SAFETY
+  GENERAL
+  BUG_REPORT
+  FEATURE_REQUEST
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_FOR_CUSTOMER
+  RESOLVED
+  CLOSED
+  CANCELLED
+}

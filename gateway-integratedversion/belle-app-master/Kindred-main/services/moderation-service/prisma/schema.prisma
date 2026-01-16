@@ -1,0 +1,384 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Content Moderation Records
+model ModerationRecord {
+  id            String   @id @default(cuid())
+  contentId     String   // Reference to message, image, etc.
+  contentType   ContentType
+  userId        String   // User who created the content
+  
+  // Content Details
+  content       String?  // Text content (truncated for storage)
+  contentUrl    String?  // URL to image, voice note, etc.
+  
+  // AI Analysis Results
+  toxicityScore    Float?
+  toxicityCategories Json? // Detailed category scores
+  
+  // Moderation Decision
+  status        ModerationStatus @default(PENDING)
+  action        ModerationAction @default(ALLOW)
+  actionReason  String?
+  confidence    Float?
+  
+  // Review Information
+  reviewedBy    String?     // Admin/moderator who reviewed
+  reviewedAt    DateTime?
+  reviewNotes   String?
+  
+  // Appeal Information
+  isAppealed    Boolean  @default(false)
+  appealReason  String?
+  appealedAt    DateTime?
+  appealStatus  AppealStatus?
+  
+  // Metadata
+  sourceService String   // Which service flagged this
+  ipAddress     String?
+  userAgent     String?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  // Relations
+  violations    UserViolation[]
+  
+  @@map("moderation_records")
+}
+
+// User Violation History
+model UserViolation {
+  id                String   @id @default(cuid())
+  userId            String
+  moderationRecordId String
+  
+  // Violation Details
+  violationType     ViolationType
+  severity          ViolationSeverity
+  description       String
+  
+  // Consequences
+  actionTaken       String?  // warn, mute, ban, etc.
+  actionDuration    Int?     // Duration in hours
+  actionExpiresAt   DateTime?
+  
+  // Appeal
+  isAppealed        Boolean  @default(false)
+  appealOutcome     AppealOutcome?
+  
+  createdAt         DateTime @default(now())
+  
+  // Relations
+  moderationRecord  ModerationRecord @relation(fields: [moderationRecordId], references: [id], onDelete: Cascade)
+  
+  @@map("user_violations")
+}
+
+// User Safety Scores and History
+model UserSafetyProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  
+  // Safety Metrics
+  totalViolations     Int     @default(0)
+  severViolations     Int     @default(0)
+  recentViolations    Int     @default(0) // Last 30 days
+  
+  // Current Status
+  isBanned            Boolean @default(false)
+  isMuted             Boolean @default(false)
+  isRestricted        Boolean @default(false)
+  restrictionReason   String?
+  
+  // Ban Information
+  banReason           String?
+  banStartedAt        DateTime?
+  banExpiresAt        DateTime?
+  banAppealable       Boolean @default(true)
+  
+  // Mute Information
+  muteReason          String?
+  muteExpiresAt       DateTime?
+  
+  // Trust Score (0-100)
+  trustScore          Float   @default(50.0)
+  lastTrustUpdate     DateTime @default(now())
+  
+  // Communication Restrictions
+  canSendMessages     Boolean @default(true)
+  canSendVoiceNotes   Boolean @default(true)
+  canSendImages       Boolean @default(true)
+  canCreateRooms      Boolean @default(true)
+  
+  // Monitoring Level
+  moderationLevel     ModerationLevel @default(STANDARD)
+  flagForReview       Boolean @default(false)
+  
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  
+  @@map("user_safety_profiles")
+}
+
+// Automated Moderation Rules
+model ModerationRule {
+  id            String   @id @default(cuid())
+  name          String
+  description   String
+  isActive      Boolean  @default(true)
+  
+  // Rule Conditions
+  contentType   ContentType?
+  toxicityThreshold Float?
+  keywords      String[] // Blocked keywords
+  patterns      String[] // Regex patterns
+  
+  // Actions
+  autoAction    ModerationAction
+  flagForReview Boolean  @default(false)
+  notifyAdmins  Boolean  @default(false)
+  
+  // Rule Metadata
+  priority      Int      @default(0)
+  createdBy     String
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("moderation_rules")
+}
+
+// Admin Alert Queue
+model AdminAlert {
+  id            String      @id @default(cuid())
+  type          AlertType
+  severity      AlertSeverity
+  title         String
+  description   String
+  
+  // Related Data
+  userId        String?
+  contentId     String?
+  moderationRecordId String?
+  
+  // Alert Status
+  status        AlertStatus @default(PENDING)
+  assignedTo    String?     // Admin user ID
+  resolvedBy    String?
+  resolvedAt    DateTime?
+  resolution    String?
+  
+  // Metadata
+  metadata      Json?
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  @@map("admin_alerts")
+}
+
+// Moderation Statistics (daily aggregates)
+model ModerationStats {
+  id                    String   @id @default(cuid())
+  date                  DateTime @db.Date
+  
+  // Content Analysis
+  totalContentAnalyzed  Int      @default(0)
+  textMessagesAnalyzed  Int      @default(0)
+  imagesAnalyzed        Int      @default(0)
+  voiceNotesAnalyzed    Int      @default(0)
+  
+  // Actions Taken
+  contentBlocked        Int      @default(0)
+  contentFlagged        Int      @default(0)
+  contentAllowed        Int      @default(0)
+  
+  // User Actions
+  usersWarned           Int      @default(0)
+  usersMuted            Int      @default(0)
+  usersBanned           Int      @default(0)
+  
+  // Quality Metrics
+  falsePositives        Int      @default(0)
+  falseNegatives        Int      @default(0)
+  avgToxicityScore      Float?
+  
+  // Performance
+  avgProcessingTime     Float?   // in milliseconds
+  apiErrorRate          Float    @default(0)
+  
+  createdAt             DateTime @default(now())
+  
+  @@unique([date])
+  @@map("moderation_stats")
+}
+
+// Keyword and Pattern Filters
+model ContentFilter {
+  id            String      @id @default(cuid())
+  type          FilterType
+  pattern       String      // keyword or regex pattern
+  severity      ViolationSeverity
+  
+  // Filter Settings
+  isActive      Boolean     @default(true)
+  isRegex       Boolean     @default(false)
+  isCaseSensitive Boolean   @default(false)
+  
+  // Context
+  category      String?     // profanity, hate_speech, etc.
+  description   String?
+  
+  // Usage Stats
+  matchCount    Int         @default(0)
+  lastMatched   DateTime?
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  @@map("content_filters")
+}
+
+// Appeal Records
+model AppealRecord {
+  id                  String        @id @default(cuid())
+  userId              String
+  moderationRecordId  String?
+  violationId         String?
+  
+  // Appeal Details
+  reason              String
+  description         String
+  evidence            String[]      // URLs to evidence files
+  
+  // Review Process
+  status              AppealStatus  @default(PENDING)
+  reviewedBy          String?
+  reviewedAt          DateTime?
+  reviewDecision      AppealOutcome?
+  reviewNotes         String?
+  
+  // Escalation
+  isEscalated         Boolean       @default(false)
+  escalatedTo         String?
+  escalatedAt         DateTime?
+  
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  
+  @@map("appeal_records")
+}
+
+// Enums
+enum ContentType {
+  TEXT_MESSAGE
+  VOICE_NOTE
+  IMAGE
+  VIDEO
+  PROFILE_CONTENT
+  USER_REPORT
+}
+
+enum ModerationStatus {
+  PENDING
+  PROCESSING
+  REVIEWED
+  ESCALATED
+  RESOLVED
+}
+
+enum ModerationAction {
+  ALLOW
+  FLAG
+  WARN
+  MUTE
+  BLOCK
+  BAN
+  ESCALATE
+}
+
+enum ViolationType {
+  TOXICITY
+  HARASSMENT
+  HATE_SPEECH
+  SPAM
+  INAPPROPRIATE_CONTENT
+  VIOLENCE_THREAT
+  SELF_HARM
+  NUDITY
+  MINOR_SAFETY
+  IMPERSONATION
+  FAKE_PROFILE
+  TECHNICAL_ABUSE
+}
+
+enum ViolationSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AppealStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  DENIED
+  ESCALATED
+}
+
+enum AppealOutcome {
+  UPHELD
+  OVERTURNED
+  MODIFIED
+  ESCALATED
+}
+
+enum ModerationLevel {
+  MINIMAL     // Trusted users
+  STANDARD    // Normal users
+  ENHANCED    // Users with some violations
+  STRICT      // Users with multiple violations
+  MANUAL      // All content requires manual review
+}
+
+enum AlertType {
+  HIGH_TOXICITY
+  REPEATED_VIOLATIONS
+  MASS_REPORTS
+  SYSTEM_ERROR
+  APPEAL_SUBMITTED
+  ESCALATION_REQUIRED
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AlertStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  RESOLVED
+  DISMISSED
+}
+
+enum FilterType {
+  KEYWORD
+  REGEX
+  PHRASE
+  DOMAIN
+}

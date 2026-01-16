@@ -1,0 +1,276 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Interaction Sessions (video calls, chats)
+model InteractionSession {
+  id          String   @id @default(cuid())
+  sessionId   String   @unique
+  type        SessionType
+  status      SessionStatus
+  userId1     String
+  userId2     String?
+  startedAt   DateTime @default(now())
+  endedAt     DateTime?
+  duration    Int?     // Duration in seconds
+  
+  // Connection Quality Metrics
+  avgLatency      Float?
+  connectionIssues Boolean @default(false)
+  bandwidthUsage  Float?  // MB used
+  
+  // Feature Usage
+  videoEnabled    Boolean @default(true)
+  audioEnabled    Boolean @default(true)
+  textChatUsed    Boolean @default(false)
+  screenShareUsed Boolean @default(false)
+  
+  // Geographic Info
+  userCountry1    String?
+  userCountry2    String?
+  timezone1       String?
+  timezone2       String?
+  
+  // Related Data
+  messages        ChatMessage[]
+  actions         UserAction[]
+  reportIncident  ReportIncident?
+  
+  @@map("interaction_sessions")
+}
+
+// Chat Messages within sessions
+model ChatMessage {
+  id            String   @id @default(cuid())
+  sessionId     String
+  senderId      String
+  recipientId   String?
+  content       String
+  messageType   MessageType @default(TEXT)
+  timestamp     DateTime @default(now())
+  
+  // Voice Message specific
+  voiceUrl      String?
+  voiceDuration Int?     // Duration in seconds
+  
+  // Moderation
+  isModerated   Boolean @default(false)
+  moderationReason String?
+  toxicityScore    Float?
+  
+  // Relations
+  session       InteractionSession @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+  
+  @@map("chat_messages")
+}
+
+// User Actions tracking
+model UserAction {
+  id          String     @id @default(cuid())
+  userId      String
+  sessionId   String?
+  actionType  ActionType
+  timestamp   DateTime   @default(now())
+  metadata    Json?      // Additional action-specific data
+  
+  // Geographic/Device Info
+  userAgent   String?
+  ipAddress   String?
+  country     String?
+  
+  // Relations
+  session     InteractionSession? @relation(fields: [sessionId], references: [sessionId], onDelete: SetNull)
+  
+  @@map("user_actions")
+}
+
+// Safety & Reporting
+model ReportIncident {
+  id            String       @id @default(cuid())
+  reporterId    String
+  reportedUserId String?
+  sessionId     String?      @unique
+  reportType    ReportType
+  reason        String
+  description   String?
+  status        ReportStatus @default(PENDING)
+  severity      Severity     @default(MEDIUM)
+  
+  // Admin Review
+  reviewedBy    String?
+  reviewedAt    DateTime?
+  resolution    String?
+  actionTaken   String?
+  
+  // Evidence
+  evidenceUrls  String[]     // Screenshots, recordings, etc.
+  chatSnapshot  Json?        // Relevant chat messages
+  
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  
+  // Relations
+  session       InteractionSession? @relation(fields: [sessionId], references: [sessionId], onDelete: SetNull)
+  
+  @@map("report_incidents")
+}
+
+// User Analytics Summary (aggregated data)
+model UserAnalytics {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  
+  // Session Stats
+  totalSessions     Int      @default(0)
+  totalDuration     Int      @default(0) // Total minutes
+  avgSessionLength  Float    @default(0)
+  
+  // Recent Activity
+  lastActiveAt      DateTime?
+  sessionsThisWeek  Int      @default(0)
+  sessionsThisMonth Int      @default(0)
+  
+  // Interaction Quality
+  avgRating         Float?   // Based on mutual ratings
+  completedSessions Int      @default(0)
+  skippedSessions   Int      @default(0)
+  
+  // Safety Metrics
+  reportsReceived   Int      @default(0)
+  reportsMade       Int      @default(0)
+  isBanned          Boolean  @default(false)
+  banReason         String?
+  banExpiresAt      DateTime?
+  
+  // Geographic Preferences
+  preferredCountries String[]
+  timeZone          String?
+  
+  // Feature Usage
+  voiceChatUsage    Int      @default(0)
+  textChatUsage     Int      @default(0)
+  videoCallUsage    Int      @default(0)
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@map("user_analytics")
+}
+
+model AnalyticsEvent {
+  id             String   @id @default(cuid())
+  userId         String?  @map("user_id")
+  sessionId      String?  @map("session_id")
+  eventName      String   @map("event_name")
+  payload        Json?
+  eventTimestamp DateTime @default(now()) @map("event_timestamp")
+  ipAddress      String?  @map("ip_address")
+  userAgent      String?  @map("user_agent")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@map("analytics_events")
+  @@index([eventTimestamp])
+  @@index([userId, eventTimestamp])
+  @@index([eventName, eventTimestamp])
+}
+
+// System Performance Metrics
+model SystemMetrics {
+  id              String   @id @default(cuid())
+  timestamp       DateTime @default(now())
+  
+  // Performance Metrics
+  activeSessions  Int
+  avgLatency      Float
+  serverLoad      Float
+  memoryUsage     Float
+  cpuUsage        Float
+  
+  // Business Metrics
+  newUsersToday   Int
+  sessionsToday   Int
+  errorRate       Float
+  
+  // Geographic Distribution
+  topCountries    Json     // { "US": 45, "UK": 23, ... }
+  
+  @@map("system_metrics")
+}
+
+// Enums
+enum SessionType {
+  VIDEO_CALL
+  VOICE_CALL
+  TEXT_CHAT
+  RANDOM_MATCH
+  INTEREST_MATCH
+}
+
+enum SessionStatus {
+  WAITING
+  CONNECTED
+  ENDED
+  INTERRUPTED
+  REPORTED
+}
+
+enum MessageType {
+  TEXT
+  VOICE
+  IMAGE
+  EMOJI
+  SYSTEM
+}
+
+enum ActionType {
+  LOGIN
+  LOGOUT
+  START_SESSION
+  END_SESSION
+  SKIP_USER
+  REPORT_USER
+  RATE_SESSION
+  UPDATE_PROFILE
+  CHANGE_SETTINGS
+  PURCHASE_PREMIUM
+  USE_FILTER
+  SEND_MESSAGE
+  MAKE_CALL
+  SCREEN_SHARE
+}
+
+enum ReportType {
+  INAPPROPRIATE_CONTENT
+  HARASSMENT
+  SPAM
+  NUDITY
+  VIOLENCE
+  HATE_SPEECH
+  UNDERAGE_USER
+  FAKE_PROFILE
+  TECHNICAL_ISSUE
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+  ESCALATED
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}

@@ -1,0 +1,127 @@
+{
+  "common": {
+    "buttons": {
+      "submit": "Enviar",
+      "cancel": "Cancelar",
+      "save": "Guardar",
+      "delete": "Eliminar",
+      "edit": "Editar",
+      "close": "Cerrar",
+      "back": "Atrás",
+      "next": "Siguiente",
+      "previous": "Anterior",
+      "confirm": "Confirmar",
+      "retry": "Reintentar",
+      "refresh": "Actualizar",
+      "loading": "Cargando...",
+      "search": "Buscar",
+      "filter": "Filtrar",
+      "sort": "Ordenar",
+      "clear": "Limpiar",
+      "apply": "Aplicar"
+    },
+    "status": {
+      "online": "En línea",
+      "offline": "Desconectado",
+      "in_call": "En llamada",
+      "queuing": "Buscando coincidencia",
+      "away": "Ausente",
+      "busy": "Ocupado"
+    },
+    "errors": {
+      "generic": "Ocurrió un error. Por favor, inténtalo de nuevo.",
+      "network": "Error de red. Por favor, verifica tu conexión.",
+      "unauthorized": "No estás autorizado para realizar esta acción.",
+      "forbidden": "Acceso denegado.",
+      "not_found": "El recurso solicitado no fue encontrado.",
+      "server_error": "Error del servidor. Por favor, inténtalo más tarde.",
+      "validation": "Por favor, verifica tu entrada e inténtalo de nuevo.",
+      "required_field": "Este campo es obligatorio",
+      "invalid_email": "Por favor, introduce una dirección de email válida",
+      "invalid_username": "El nombre de usuario debe tener 3-20 caracteres y contener solo letras, números y guiones bajos",
+      "password_too_short": "La contraseña debe tener al menos 8 caracteres",
+      "passwords_dont_match": "Las contraseñas no coinciden"
+    },
+    "navigation": {
+      "home": "Inicio",
+      "profile": "Perfil",
+      "settings": "Configuración",
+      "help": "Ayuda",
+      "about": "Acerca de",
+      "contact": "Contacto",
+      "privacy": "Privacidad",
+      "terms": "Términos de Servicio",
+      "logout": "Cerrar sesión",
+      "login": "Iniciar sesión",
+      "signup": "Registrarse"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Bienvenido de nuevo",
+      "subtitle": "Inicia sesión para continuar tus conexiones",
+      "email_label": "Dirección de email",
+      "email_placeholder": "Introduce tu email",
+      "password_label": "Contraseña",
+      "password_placeholder": "Introduce tu contraseña",
+      "remember_me": "Recordarme",
+      "forgot_password": "¿Olvidaste tu contraseña?",
+      "login_button": "Iniciar sesión",
+      "signup_link": "¿No tienes cuenta? Regístrate",
+      "logging_in": "Iniciando sesión..."
+    },
+    "signup": {
+      "title": "Únete a Real-time Connect",
+      "subtitle": "Crea tu cuenta para empezar a conocer gente",
+      "username_label": "Nombre de usuario",
+      "username_placeholder": "Elige un nombre de usuario",
+      "email_label": "Dirección de email",
+      "email_placeholder": "Introduce tu email",
+      "password_label": "Contraseña",
+      "password_placeholder": "Crea una contraseña",
+      "confirm_password_label": "Confirmar contraseña",
+      "confirm_password_placeholder": "Confirma tu contraseña",
+      "age_label": "Edad",
+      "age_placeholder": "Introduce tu edad",
+      "gender_label": "Género",
+      "terms_agreement": "Acepto los Términos de Servicio y Política de Privacidad",
+      "signup_button": "Crear cuenta",
+      "login_link": "¿Ya tienes cuenta? Inicia sesión",
+      "creating_account": "Creando cuenta..."
+    }
+  },
+  "profile": {
+    "setup": {
+      "title": "Configura tu perfil",
+      "subtitle": "Cuéntanos sobre ti para encontrar mejores coincidencias",
+      "display_name_label": "Nombre a mostrar",
+      "display_name_placeholder": "¿Cómo te ven los demás?",
+      "bio_label": "Biografía corta",
+      "bio_placeholder": "Cuéntanos un poco sobre ti (opcional)",
+      "intent_label": "¿Qué estás buscando?",
+      "intent_friendship": "Amistad",
+      "intent_dating": "Citas",
+      "intent_casual": "Chat casual",
+      "intent_professional": "Networking profesional"
+    }
+  },
+  "matching": {
+    "queue": {
+      "title": "Buscando coincidencia",
+      "subtitle": "Estamos encontrando a alguien para que te conectes",
+      "searching": "Buscando coincidencias...",
+      "estimated_wait": "Tiempo estimado: {{time}}",
+      "cancel": "Cancelar búsqueda"
+    }
+  },
+  "chat": {
+    "interface": {
+      "type_message": "Escribe tu mensaje...",
+      "send_message": "Enviar",
+      "voice_note": "Nota de voz",
+      "send_photo": "Enviar foto",
+      "send_video": "Enviar video",
+      "start_video_call": "Iniciar videollamada"
+    }
+  }
+}

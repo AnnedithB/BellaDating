@@ -1,0 +1,249 @@
+/**
+ * Example integration of internationalization in user-service
+ * This demonstrates how to use the i18n system across microservices
+ */
+
+import express from 'express';
+import cors from 'cors';
+import { 
+  createI18nMiddleware,
+  createLanguageSwitchHandler,
+  createLanguageInfoHandler,
+  t,
+  formatters,
+  getLocalizedGreeting,
+  I18nRequest
+} from '@realtime-connect/shared';
+
+const app = express();
+
+// Basic middleware
+app.use(express.json());
+app.use(cors());
+
+// i18n middleware configuration
+const i18nMiddleware = createI18nMiddleware({
+  defaultLanguage: 'en',
+  enableDetection: true,
+  cookieName: 'rtc_language',
+  allowedLanguages: ['en', 'es', 'fr', 'de', 'ja', 'ko', 'zh', 'ar', 'hi', 'pt', 'ru', 'it'],
+  debug: process.env.NODE_ENV === 'development'
+});
+
+// Apply i18n middleware globally
+app.use(i18nMiddleware);
+
+// Language management routes
+app.post('/api/language/switch', createLanguageSwitchHandler());
+app.get('/api/language/info', createLanguageInfoHandler());
+
+// Example user routes with internationalization
+app.get('/api/users/welcome', (req: I18nRequest, res) => {
+  const greeting = getLocalizedGreeting(req.language, new Date().getHours());
+  const welcomeMessage = req.t('auth.login.title');
+  
+  res.json({
+    greeting,
+    message: welcomeMessage,
+    language: req.language,
+    locale: req.locale
+  });
+});
+
+app.get('/api/users/profile/:id', async (req: I18nRequest, res) => {
+  try {
+    // Mock user data - in real implementation, fetch from database
+    const user = {
+      id: req.params.id,
+      username: 'john_doe',
+      displayName: 'John Doe',
+      age: 25,
+      location: 'New York, US',
+      joinDate: new Date('2023-01-15'),
+      lastSeen: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
+      balance: 1234.56
+    };
+
+    // Localized response
+    const response = {
+      user: {
+        ...user,
+        // Localized date formatting
+        joinDateFormatted: req.formatDate(user.joinDate, { 
+          year: 'numeric', 
+          month: 'long', 
+          day: 'numeric' 
+        }),
+        lastSeenFormatted: req.formatRelativeTime(user.lastSeen),
+        balanceFormatted: req.formatCurrency(user.balance)
+      },
+      // Localized labels
+      labels: {
+        age: req.t('profile.view.age', { age: user.age }),
+        location: req.t('profile.view.location', { location: user.location }),
+        memberSince: req.t('profile.view.member_since', { 
+          date: req.formatDate(user.joinDate, { year: 'numeric', month: 'long' })
+        }),
+        lastSeen: req.t('profile.view.last_seen', { 
+          time: req.formatRelativeTime(user.lastSeen)
+        })
+      },
+      // Cultural formatting examples
+      formatting: {
+        currency: {
+          usd: req.formatCurrency(user.balance, 'USD'),
+          local: req.formatCurrency(user.balance) // Uses user's locale currency
+        },
+        numbers: {
+          large: req.formatNumber(1234567.89),
+          percentage: req.formatNumber(0.756, { style: 'percent' })
+        },
+        dates: {
+          short: req.formatDate(user.joinDate, { dateStyle: 'short' }),
+          medium: req.formatDate(user.joinDate, { dateStyle: 'medium' }),
+          long: req.formatDate(user.joinDate, { dateStyle: 'long' })
+        }
+      }
+    };
+
+    res.json(response);
+  } catch (error) {
+    console.error('Profile fetch error:', error);
+    res.status(500).json({
+      error: req.t('common.errors.server_error')
+    });
+  }
+});
+
+app.get('/api/users/search', (req: I18nRequest, res) => {
+  const { query, page = 1, limit = 20 } = req.query;
+
+  if (!query) {
+    return res.status(400).json({
+      error: req.t('common.errors.required_field'),
+      field: 'query'
+    });
+  }
+
+  // Mock search results
+  const users = [
+    {
+      id: '1',
+      username: 'alice_smith',
+      displayName: 'Alice Smith',
+      age: 23,
+      location: 'London, UK',
+      online: true,
+      lastSeen: new Date()
+    },
+    {
+      id: '2',
+      username: 'bob_jones',
+      displayName: 'Bob Jones',
+      age: 28,
+      location: 'Toronto, CA',
+      online: false,
+      lastSeen: new Date(Date.now() - 30 * 60 * 1000) // 30 minutes ago
+    }
+  ];
+
+  // Localize the results
+  const localizedUsers = users.map(user => ({
+    ...user,
+    statusText: user.online 
+      ? req.t('common.status.online')
+      : req.t('profile.view.last_seen', { 
+          time: req.formatRelativeTime(user.lastSeen)
+        }),
+    ageText: req.t('profile.view.age', { age: user.age }),
+    locationText: req.t('profile.view.location', { location: user.location })
+  }));
+
+  res.json({
+    results: localizedUsers,
+    pagination: {
+      page: Number(page),
+      limit: Number(limit),
+      total: users.length,
+      totalPages: Math.ceil(users.length / Number(limit))
+    },
+    meta: {
+      query: String(query),
+      language: req.language,
+      resultsText: req.t('search.results_count', { 
+        count: users.length,
+        query: String(query)
+      })
+    }
+  });
+});
+
+// Error handling with localized messages
+app.use((error: Error, req: I18nRequest, res: express.Response, next: express.NextFunction) => {
+  console.error('Unhandled error:', error);
+
+  const isValidationError = error.message.includes('validation');
+  const isNetworkError = error.message.includes('network') || error.message.includes('timeout');
+
+  let errorMessage: string;
+  let statusCode: number;
+
+  if (isValidationError) {
+    errorMessage = req.t('common.errors.validation');
+    statusCode = 400;
+  } else if (isNetworkError) {
+    errorMessage = req.t('common.errors.network');
+    statusCode = 503;
+  } else {
+    errorMessage = req.t('common.errors.generic');
+    statusCode = 500;
+  }
+
+  res.status(statusCode).json({
+    error: errorMessage,
+    details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    timestamp: req.formatDate(new Date(), { 
+      dateStyle: 'short', 
+      timeStyle: 'medium' 
+    }),
+    requestId: req.headers['x-request-id'] || 'unknown'
+  });
+});
+
+// Health check with localized response
+app.get('/health', (req: I18nRequest, res) => {
+  const now = new Date();
+  const greeting = getLocalizedGreeting(req.language, now.getHours());
+  
+  res.json({
+    status: 'healthy',
+    timestamp: req.formatDate(now, { 
+      dateStyle: 'full', 
+      timeStyle: 'long' 
+    }),
+    greeting,
+    language: req.language,
+    locale: req.locale,
+    message: req.t('common.status.online')
+  });
+});
+
+const PORT = process.env.PORT || 3001;
+
+app.listen(PORT, () => {
+  console.log(`User Service with i18n running on port ${PORT}`);
+  console.log('Supported languages:', ['en', 'es', 'fr', 'de', 'ja', 'ko', 'zh', 'ar', 'hi', 'pt', 'ru', 'it']);
+  console.log('Language detection: URL params, cookies, Accept-Language header');
+  console.log('');
+  console.log('Example endpoints:');
+  console.log('  GET  /api/users/welcome');
+  console.log('  GET  /api/users/profile/:id');
+  console.log('  GET  /api/users/search?query=alice');
+  console.log('  POST /api/language/switch (body: { language: "es" })');
+  console.log('  GET  /api/language/info');
+  console.log('  GET  /health');
+  console.log('');
+  console.log('Try adding ?lng=es to any endpoint to test Spanish translations');
+});
+
+export default app;

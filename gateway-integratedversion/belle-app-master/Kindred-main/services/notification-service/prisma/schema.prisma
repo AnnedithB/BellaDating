@@ -1,0 +1,223 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model DeviceToken {
+  id          String      @id @default(cuid())
+  userId      String
+  token       String      @unique
+  platform    Platform
+  isActive    Boolean     @default(true)
+  appVersion  String?
+  deviceModel String?
+  osVersion   String?
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  lastUsedAt  DateTime    @default(now())
+  
+  // Relations
+  notifications NotificationDelivery[]
+  
+  @@index([userId])
+  @@index([platform])
+  @@map("device_tokens")
+}
+
+model NotificationTemplate {
+  id           String              @id @default(cuid())
+  name         String              @unique
+  type         NotificationType
+  
+  // Content templates
+  title        String
+  body         String
+  imageUrl     String?
+  
+  // Platform-specific content
+  iosTitle     String?
+  iosBody      String?
+  androidTitle String?
+  androidBody  String?
+  
+  // Behavior settings
+  sound        String?             @default("default")
+  badge        Int?
+  priority     NotificationPriority @default(NORMAL)
+  ttl          Int?                @default(86400) // Time to live in seconds
+  
+  // Action settings
+  clickAction  String?
+  deepLink     String?
+  actionButtons Json?              // Array of action buttons
+  
+  isActive     Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  
+  // Relations
+  notifications Notification[]
+  
+  @@map("notification_templates")
+}
+
+model Notification {
+  id           String              @id @default(cuid())
+  templateId   String?
+  type         NotificationType
+  
+  // Recipients
+  userId       String?             // Single user
+  userIds      String[]            // Multiple users
+  allUsers     Boolean             @default(false)
+  
+  // Content (can override template)
+  title        String
+  body         String
+  imageUrl     String?
+  data         Json?               // Custom data payload
+  
+  // Scheduling
+  scheduledFor DateTime?
+  status       NotificationStatus  @default(PENDING)
+  priority     NotificationPriority @default(NORMAL)
+  
+  // Tracking
+  totalTargets    Int              @default(0)
+  successfulSends Int              @default(0)
+  failedSends     Int              @default(0)
+  
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  sentAt       DateTime?
+  
+  // Relations
+  template     NotificationTemplate? @relation(fields: [templateId], references: [id])
+  deliveries   NotificationDelivery[]
+  
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@index([scheduledFor])
+  @@map("notifications")
+}
+
+model NotificationDelivery {
+  id             String         @id @default(cuid())
+  notificationId String
+  deviceTokenId  String
+  userId         String
+  
+  status         DeliveryStatus @default(PENDING)
+  errorMessage   String?
+  retryCount     Int            @default(0)
+  
+  sentAt         DateTime?
+  deliveredAt    DateTime?
+  clickedAt      DateTime?
+  
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  
+  // Relations
+  notification   Notification   @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  deviceToken    DeviceToken    @relation(fields: [deviceTokenId], references: [id], onDelete: Cascade)
+  
+  @@index([notificationId])
+  @@index([deviceTokenId])
+  @@index([userId])
+  @@index([status])
+  @@map("notification_deliveries")
+}
+
+model NotificationPreference {
+  id                String               @id @default(cuid())
+  userId            String               @unique
+  
+  // Global settings
+  globalEnabled     Boolean              @default(true)
+  quietHoursStart   String?              // Format: "HH:MM"
+  quietHoursEnd     String?              // Format: "HH:MM"
+  timezone          String?              @default("UTC")
+  
+  // Type-specific preferences
+  newMatchEnabled   Boolean              @default(true)
+  newMessageEnabled Boolean              @default(true)
+  callStartEnabled  Boolean              @default(true)
+  marketingEnabled  Boolean              @default(false)
+  
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  
+  @@map("notification_preferences")
+}
+
+model NotificationAnalytics {
+  id           String           @id @default(cuid())
+  date         DateTime         @default(now())
+  type         NotificationType
+  platform     Platform?
+  
+  // Metrics
+  sent         Int              @default(0)
+  delivered    Int              @default(0)
+  clicked      Int              @default(0)
+  failed       Int              @default(0)
+  
+  // Rates (calculated)
+  deliveryRate Decimal?         @db.Decimal(5,4)
+  clickRate    Decimal?         @db.Decimal(5,4)
+  failureRate  Decimal?         @db.Decimal(5,4)
+  
+  createdAt    DateTime         @default(now())
+  
+  @@unique([date, type, platform])
+  @@map("notification_analytics")
+}
+
+enum Platform {
+  IOS
+  ANDROID
+  WEB
+}
+
+enum NotificationType {
+  NEW_MATCH
+  NEW_MESSAGE
+  CALL_STARTING
+  CALL_MISSED
+  SYSTEM_UPDATE
+  MARKETING
+  REMINDER
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+  CRITICAL
+}
+
+enum NotificationStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum DeliveryStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+  CLICKED
+}

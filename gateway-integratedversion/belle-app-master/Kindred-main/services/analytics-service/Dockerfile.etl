@@ -1,0 +1,73 @@
+# ETL Pipeline Dockerfile
+FROM node:18-alpine AS base
+
+# Install dependencies for building native packages and cron
+RUN apk add --no-cache libc6-compat dcron
+
+# Create app directory
+WORKDIR /app
+
+# Install shared dependencies
+COPY shared/package*.json ./shared/
+RUN cd shared && npm ci --only=production && npm cache clean --force
+
+# Install analytics service dependencies
+COPY services/analytics-service/package*.json ./services/analytics-service/
+RUN cd services/analytics-service && npm ci --only=production && npm cache clean --force
+
+# Copy source code
+COPY shared/ ./shared/
+COPY services/analytics-service/ ./services/analytics-service/
+
+# Build shared modules
+WORKDIR /app/shared
+RUN npm run build
+
+# Build analytics service
+WORKDIR /app/services/analytics-service
+RUN npm run build
+
+# Generate Prisma client
+RUN npx prisma generate
+
+# Production stage
+FROM node:18-alpine AS production
+
+# Install curl for health checks and cron for scheduling
+RUN apk add --no-cache curl dcron
+
+# Create non-root user
+RUN addgroup -g 1001 -S etl && \
+    adduser -S etl -u 1001
+
+# Create app directory
+WORKDIR /app
+
+# Copy built application
+COPY --from=base --chown=etl:etl /app /app
+
+# Create cron directories
+RUN mkdir -p /var/log/cron /var/spool/cron/crontabs
+
+# Copy crontab for ETL jobs
+COPY --chown=etl:etl services/analytics-service/crontab /var/spool/cron/crontabs/etl
+
+# Set proper permissions for cron
+RUN chmod 0600 /var/spool/cron/crontabs/etl
+
+# Switch to non-root user
+USER etl
+
+# Expose port for health checks
+EXPOSE 3010
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:3010/health || exit 1
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV ETL_PORT=3010
+
+# Start cron and the ETL pipeline
+CMD ["sh", "-c", "crond -f -d 8 & node services/analytics-service/dist/etl/runner.js"]

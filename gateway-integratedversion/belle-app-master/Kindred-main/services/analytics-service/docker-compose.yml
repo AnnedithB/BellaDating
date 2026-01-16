@@ -1,0 +1,164 @@
+version: '3.8'
+
+services:
+  # Analytics Service API
+  analytics-api:
+    build:
+      context: .
+      dockerfile: services/analytics-service/Dockerfile
+    container_name: analytics-api
+    ports:
+      - "3008:3008"
+    environment:
+      - NODE_ENV=production
+      - PORT=3008
+      - DATABASE_URL=postgresql://analytics:analytics_password@analytics-db:5432/analytics
+      - ANALYTICS_DATABASE_URL=postgresql://analytics:analytics_password@analytics-db:5432/analytics
+      - USER_SERVICE_DATABASE_URL=postgresql://user:user_password@user-db:5432/users
+      - INTERACTION_SERVICE_DATABASE_URL=postgresql://interaction:interaction_password@interaction-db:5432/interactions
+      - COMMUNICATION_SERVICE_DATABASE_URL=postgresql://communication:communication_password@communication-db:5432/communications
+      - REDIS_URL=redis://analytics-redis:6379
+      - MIXPANEL_PROJECT_TOKEN=${MIXPANEL_PROJECT_TOKEN}
+    depends_on:
+      - analytics-db
+      - analytics-redis
+    networks:
+      - analytics-network
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ETL Pipeline Service
+  analytics-etl:
+    build:
+      context: .
+      dockerfile: services/analytics-service/Dockerfile.etl
+    container_name: analytics-etl
+    ports:
+      - "3010:3010"
+    environment:
+      - NODE_ENV=production
+      - ETL_PORT=3010
+      - DATABASE_URL=postgresql://analytics:analytics_password@analytics-db:5432/analytics
+      - ANALYTICS_DATABASE_URL=postgresql://analytics:analytics_password@analytics-db:5432/analytics
+      - USER_SERVICE_DATABASE_URL=postgresql://user:user_password@user-db:5432/users
+      - INTERACTION_SERVICE_DATABASE_URL=postgresql://interaction:interaction_password@interaction-db:5432/interactions
+      - COMMUNICATION_SERVICE_DATABASE_URL=postgresql://communication:communication_password@communication-db:5432/communications
+      - MIXPANEL_API_SECRET=${MIXPANEL_API_SECRET}
+      - MIXPANEL_PROJECT_TOKEN=${MIXPANEL_PROJECT_TOKEN}
+    depends_on:
+      - analytics-db
+    networks:
+      - analytics-network
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3010/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Analytics PostgreSQL Database
+  analytics-db:
+    image: postgres:15-alpine
+    container_name: analytics-db
+    environment:
+      - POSTGRES_DB=analytics
+      - POSTGRES_USER=analytics
+      - POSTGRES_PASSWORD=analytics_password
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      - analytics_data:/var/lib/postgresql/data
+      - ./services/analytics-service/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5433:5432"
+    networks:
+      - analytics-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U analytics -d analytics"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for Caching
+  analytics-redis:
+    image: redis:7-alpine
+    container_name: analytics-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - analytics_redis_data:/data
+    networks:
+      - analytics-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+
+  # Grafana for Analytics Dashboards
+  analytics-grafana:
+    image: grafana/grafana:10.0.0
+    container_name: analytics-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - analytics_grafana_data:/var/lib/grafana
+      - ./services/analytics-service/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./services/analytics-service/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - analytics-network
+    restart: unless-stopped
+    depends_on:
+      - analytics-api
+
+  # Prometheus for Metrics Collection
+  analytics-prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: analytics-prometheus
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./services/analytics-service/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - analytics_prometheus_data:/prometheus
+    networks:
+      - analytics-network
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+
+volumes:
+  analytics_data:
+    driver: local
+  analytics_redis_data:
+    driver: local
+  analytics_grafana_data:
+    driver: local
+  analytics_prometheus_data:
+    driver: local
+
+networks:
+  analytics-network:
+    driver: bridge
+    name: analytics-network
+  app-network:
+    external: true
+    name: dating-app-network
