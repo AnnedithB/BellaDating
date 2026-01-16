@@ -203,8 +203,32 @@ export default function DiscoveryScreen({ navigation, route }) {
     let partnerProfile = null;
 
     if (data?.partnerProfile && typeof data.partnerProfile === 'object') {
-      console.log('[DiscoveryScreen] Using full profile data from event');
-      return { id: partnerId, ...data.partnerProfile };
+      const preferenceKeys = [
+        'educationLevel',
+        'religion',
+        'familyPlans',
+        'hasKids',
+        'languages',
+        'ethnicity',
+        'politicalViews',
+        'exercise',
+        'smoking',
+        'drinking',
+      ];
+      const hasPreferences = preferenceKeys.some((key) => {
+        const value = data.partnerProfile?.[key];
+        if (Array.isArray(value)) {
+          return value.length > 0;
+        }
+        return value !== null && value !== undefined && value !== '';
+      });
+
+      if (hasPreferences) {
+        console.log('[DiscoveryScreen] Using full profile data from event');
+        return { id: partnerId, ...data.partnerProfile };
+      }
+
+      console.log('[DiscoveryScreen] Event profile missing preferences, fetching full profile');
     }
 
     let retries = 3;

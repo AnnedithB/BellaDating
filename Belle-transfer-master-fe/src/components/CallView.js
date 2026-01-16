@@ -135,18 +135,68 @@ export default function CallView({
   const profilePicture = profile.profilePicture || (photos.length > 0 ? photos[0] : null);
   const isPhotoVerified = profile.isPhotoVerified || false;
 
-  // Debug: Log profile data for About Me section
-  console.log('[CallView] Profile data for About Me:', {
-    languages: profile.languages,
-    ethnicity: profile.ethnicity,
-    religion: profile.religion,
-    educationLevel: profile.educationLevel,
-    familyPlans: profile.familyPlans,
-    hasKids: profile.hasKids,
-    politicalViews: profile.politicalViews,
-    exercise: profile.exercise,
-    smoking: profile.smoking,
-    drinking: profile.drinking,
+  const formatPreferenceValue = (value) => {
+    if (!value) return '';
+    if (Array.isArray(value)) {
+      return value.filter(Boolean).join(', ');
+    }
+    return String(value);
+  };
+
+  const aboutMeItems = [
+    {
+      key: 'religion',
+      label: 'Religion',
+      value: profile.religion,
+      icon: 'ribbon',
+    },
+    {
+      key: 'education',
+      label: 'Education',
+      value: profile.educationLevel,
+      icon: 'school',
+    },
+    {
+      key: 'familyPlans',
+      label: 'Family Plans',
+      value: profile.familyPlans,
+      icon: 'people',
+    },
+    {
+      key: 'hasKids',
+      label: 'Has Kids',
+      value: profile.hasKids,
+      icon: 'happy',
+    },
+    {
+      key: 'languages',
+      label: 'Languages',
+      value: profile.languages,
+      icon: 'language',
+    },
+    {
+      key: 'ethnicity',
+      label: 'Ethnicity',
+      value: profile.ethnicity,
+      icon: 'earth',
+    },
+    {
+      key: 'politicalViews',
+      label: 'Political Views',
+      value: profile.politicalViews,
+      icon: 'flag',
+    },
+    {
+      key: 'lifestyle',
+      label: 'Lifestyle',
+      value: [profile.exercise, profile.smoking, profile.drinking].filter(Boolean),
+      icon: 'fitness',
+    },
+  ].filter((item) => formatPreferenceValue(item.value));
+
+  console.log('[CallView]', {
+    file: 'src/components/CallView.js',
+    aboutMeItems: aboutMeItems.map((item) => ({ key: item.key, value: item.value })),
   });
   return (
     <View style={styles.callContainer}>
@@ -247,94 +297,19 @@ export default function CallView({
 
         <View style={styles.aboutMeSection}>
           <Text style={styles.sectionTitle}>About Me</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.aboutMeScroll}
-            contentContainerStyle={styles.aboutMeContent}
-          >
-            {(profile.intent || (profile.relationshipIntents && profile.relationshipIntents.length > 0)) && (
-              <View style={styles.aboutBubble}>
-                <Ionicons name="heart" size={20} color="#666666" />
-                <Text style={styles.aboutBubbleLabel}>Looking For</Text>
-                <Text style={styles.aboutBubbleValue}>
-                  {profile.relationshipIntents && profile.relationshipIntents.length > 0
-                    ? profile.relationshipIntents.map(i => formatIntent(i)).join(', ')
-                    : formatIntent(profile.intent)}
-                </Text>
-              </View>
-            )}
-
-            {profile.languages && (Array.isArray(profile.languages) ? profile.languages.length > 0 : profile.languages) && (
-              <View style={styles.aboutBubble}>
-                <Ionicons name="language" size={20} color="#666666" />
-                <Text style={styles.aboutBubbleLabel}>Languages</Text>
-                <Text style={styles.aboutBubbleValue}>
-                  {Array.isArray(profile.languages) ? profile.languages.join(', ') : profile.languages}
-                </Text>
-              </View>
-            )}
-
-            {profile.ethnicity && (
-              <View style={styles.aboutBubble}>
-                <Ionicons name="earth" size={20} color="#666666" />
-                <Text style={styles.aboutBubbleLabel}>Ethnicity</Text>
-                <Text style={styles.aboutBubbleValue}>{profile.ethnicity}</Text>
-              </View>
-            )}
-
-            {profile.religion && (
-              <View style={styles.aboutBubble}>
-                <Ionicons name="ribbon" size={20} color="#666666" />
-                <Text style={styles.aboutBubbleLabel}>Religion</Text>
-                <Text style={styles.aboutBubbleValue}>{profile.religion}</Text>
-              </View>
-            )}
-
-            {profile.educationLevel && (
-              <View style={styles.aboutBubble}>
-                <Ionicons name="school" size={20} color="#666666" />
-                <Text style={styles.aboutBubbleLabel}>Education</Text>
-                <Text style={styles.aboutBubbleValue}>{profile.educationLevel}</Text>
-              </View>
-            )}
-
-            {profile.familyPlans && (
-              <View style={styles.aboutBubble}>
-                <Ionicons name="people" size={20} color="#666666" />
-                <Text style={styles.aboutBubbleLabel}>Family Plans</Text>
-                <Text style={styles.aboutBubbleValue}>{profile.familyPlans}</Text>
-              </View>
-            )}
-
-            {profile.hasKids && (
-              <View style={styles.aboutBubble}>
-                <Ionicons name="happy" size={20} color="#666666" />
-                <Text style={styles.aboutBubbleLabel}>Has Kids</Text>
-                <Text style={styles.aboutBubbleValue}>
-                  {Array.isArray(profile.hasKids) ? profile.hasKids.join(', ') : profile.hasKids}
-                </Text>
-              </View>
-            )}
-
-            {profile.politicalViews && (
-              <View style={styles.aboutBubble}>
-                <Ionicons name="flag" size={20} color="#666666" />
-                <Text style={styles.aboutBubbleLabel}>Political Views</Text>
-                <Text style={styles.aboutBubbleValue}>{profile.politicalViews}</Text>
-              </View>
-            )}
-
-            {(profile.exercise || profile.smoking || profile.drinking) && (
-              <View style={styles.aboutBubble}>
-                <Ionicons name="fitness" size={20} color="#666666" />
-                <Text style={styles.aboutBubbleLabel}>Lifestyle</Text>
-                <Text style={styles.aboutBubbleValue}>
-                  {[profile.exercise, profile.smoking, profile.drinking].filter(Boolean).join(' · ')}
-                </Text>
-              </View>
-            )}
-          </ScrollView>
+          {aboutMeItems.length > 0 ? (
+            <View style={styles.aboutMeGrid}>
+              {aboutMeItems.map((item) => (
+                <View key={item.key} style={styles.aboutCard}>
+                  <Ionicons name={item.icon} size={20} color="#666666" />
+                  <Text style={styles.aboutCardLabel}>{item.label}</Text>
+                  <Text style={styles.aboutCardValue}>{formatPreferenceValue(item.value)}</Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.aboutMeEmpty}>No preferences added yet.</Text>
+          )}
         </View>
 
         {interests.length > 0 && (
@@ -532,26 +507,23 @@ const styles = StyleSheet.create({
     color: '#000000',
     marginBottom: 12,
   },
-  aboutMeScroll: {
-    marginHorizontal: -20,
-    paddingLeft: 20,
-  },
-  aboutMeContent: {
-    paddingRight: 20,
+  aboutMeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
   },
-  aboutBubble: {
-    backgroundColor: '#f5f5f5',
-    paddingHorizontal: 16,
+  aboutCard: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
     paddingVertical: 16,
     borderRadius: 16,
-    minWidth: 160,
-    maxWidth: 200,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexBasis: '48%',
     borderWidth: 1,
     borderColor: '#e0e0e0',
   },
-  aboutBubbleLabel: {
+  aboutCardLabel: {
     fontSize: 14,
     fontWeight: '600',
     color: '#000000',
@@ -559,11 +531,15 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     textAlign: 'center',
   },
-  aboutBubbleValue: {
+  aboutCardValue: {
     fontSize: 13,
     color: '#666666',
     textAlign: 'center',
     lineHeight: 18,
+  },
+  aboutMeEmpty: {
+    fontSize: 14,
+    color: '#666666',
   },
   interestsSection: {
     marginBottom: 24,

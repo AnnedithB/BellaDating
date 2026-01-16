@@ -1,9 +1,104 @@
-import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, ScrollView, Image, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { userAPI } from './services/api';
 
-export default function CallView({ callDuration, onEndCall, formatCallTime }) {
+export default function CallView({
+  callDuration,
+  onEndCall,
+  formatCallTime,
+  partnerProfile,
+  partnerId,
+}) {
+  const [profile, setProfile] = useState(partnerProfile || null);
+  const [loading, setLoading] = useState(!partnerProfile && !!partnerId);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      if (partnerProfile) {
+        setProfile(partnerProfile);
+        setLoading(false);
+        return;
+      }
+
+      if (partnerId) {
+        try {
+          setLoading(true);
+          setError(null);
+          const userData = await userAPI.getUser(partnerId);
+          setProfile(userData || null);
+        } catch (err) {
+          setError(err?.message || 'Failed to load profile');
+          setProfile(null);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchProfile();
+  }, [partnerProfile, partnerId]);
+
+  const formatPreferenceValue = (value) => {
+    if (!value) return '';
+    if (Array.isArray(value)) {
+      return value.filter(Boolean).join(', ');
+    }
+    return String(value);
+  };
+
+  if (loading) {
+    return (
+      <View style={[styles.callContainer, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color="#000000" />
+        <Text style={styles.loadingText}>Loading profile...</Text>
+      </View>
+    );
+  }
+
+  if (error || !profile) {
+    return (
+      <View style={[styles.callContainer, styles.loadingContainer]}>
+        <Ionicons name="alert-circle-outline" size={48} color="#ff4444" />
+        <Text style={styles.errorText}>{error || 'Profile not available'}</Text>
+      </View>
+    );
+  }
+
+  const displayName = profile.name || profile.displayName || 'Unknown';
+  const age = profile.age ? `${profile.age}` : '';
+  const location = profile.location ? String(profile.location).toUpperCase() : '';
+  const bio = profile.bio || profile.shortBio || '';
+  const interests = profile.interests || [];
+  const photos = profile.photos || [];
+  const profilePicture = profile.profilePicture || (photos.length > 0 ? photos[0] : null);
+
+  const aboutMeItems = [
+    { key: 'religion', label: 'Religion', value: profile.religion, icon: 'ribbon' },
+    { key: 'education', label: 'Education', value: profile.educationLevel, icon: 'school' },
+    { key: 'familyPlans', label: 'Family Plans', value: profile.familyPlans, icon: 'people' },
+    { key: 'hasKids', label: 'Has Kids', value: profile.hasKids, icon: 'happy' },
+    { key: 'languages', label: 'Languages', value: profile.languages, icon: 'language' },
+    { key: 'ethnicity', label: 'Ethnicity', value: profile.ethnicity, icon: 'earth' },
+    { key: 'politicalViews', label: 'Political Views', value: profile.politicalViews, icon: 'flag' },
+    {
+      key: 'lifestyle',
+      label: 'Lifestyle',
+      value: [profile.exercise, profile.smoking, profile.drinking].filter(Boolean),
+      icon: 'fitness',
+    },
+  ].filter((item) => formatPreferenceValue(item.value));
+
+  console.log('[CallView]', {
+    file: 'src/CallView.js',
+    aboutMeItems: aboutMeItems.map((item) => ({
+      key: item.key,
+      value: item.value,
+    })),
+  });
+
   return (
     <View style={styles.callContainer}>
       <View style={styles.callTopBar}>
@@ -23,9 +118,13 @@ export default function CallView({ callDuration, onEndCall, formatCallTime }) {
 
       <ScrollView style={styles.profileDetails} showsVerticalScrollIndicator={false}>
         <View style={styles.profileImageContainer}>
-          <View style={styles.profileImage}>
-            <Ionicons name="person" size={100} color="#cccccc" />
-          </View>
+          {profilePicture ? (
+            <Image source={{ uri: profilePicture }} style={styles.profileImage} resizeMode="cover" />
+          ) : (
+            <View style={styles.profileImage}>
+              <Ionicons name="person" size={100} color="#cccccc" />
+            </View>
+          )}
           
           <LinearGradient
             colors={['transparent', 'rgba(0, 0, 0, 0.7)']}
@@ -34,116 +133,79 @@ export default function CallView({ callDuration, onEndCall, formatCallTime }) {
           />
 
           <View style={styles.profileInfoOverlay}>
-            <View style={styles.verifiedBadge}>
-              <Ionicons name="shield-checkmark" size={12} color="#4CAF50" />
-              <Text style={styles.verifiedText}>Photo Verified</Text>
-            </View>
-            <Text style={styles.profileName}>Emma, 29</Text>
-            <Text style={styles.profileTitle}>MBA · Marketing Professional</Text>
-            <Text style={styles.profileLocation}>LOS ANGELES</Text>
+            {profile.isPhotoVerified && (
+              <View style={styles.verifiedBadge}>
+                <Ionicons name="shield-checkmark" size={12} color="#4CAF50" />
+                <Text style={styles.verifiedText}>Photo Verified</Text>
+              </View>
+            )}
+            <Text style={styles.profileName}>
+              {displayName}{age ? `, ${age}` : ''}
+            </Text>
+            {profile.educationLevel && (
+              <Text style={styles.profileTitle}>{profile.educationLevel}</Text>
+            )}
+            {location ? (
+              <Text style={styles.profileLocation}>{location}</Text>
+            ) : null}
           </View>
         </View>
 
-        <View style={styles.bioSection}>
-          <Text style={styles.bioTitle}>Bio</Text>
-          <Text style={styles.bioText}>Book lover and aspiring novelist. Looking for intellectual conversations.</Text>
-        </View>
-
-        <View style={styles.lookingForSection}>
-          <Text style={styles.lookingForTitle}>Looking For</Text>
-          <Text style={styles.lookingForText}>Dating · Long-term relationship</Text>
-        </View>
+        {bio ? (
+          <View style={styles.bioSection}>
+            <Text style={styles.bioTitle}>Bio</Text>
+            <Text style={styles.bioText}>{bio}</Text>
+          </View>
+        ) : null}
 
         <View style={styles.aboutMeSection}>
           <Text style={styles.sectionTitle}>About Me</Text>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            style={styles.aboutMeScroll}
-            contentContainerStyle={styles.aboutMeContent}
-          >
-            <View style={styles.aboutBubble}>
-              <Ionicons name="language" size={20} color="#666666" />
-              <Text style={styles.aboutBubbleLabel}>Languages</Text>
-              <Text style={styles.aboutBubbleValue}>English, Spanish</Text>
+          {aboutMeItems.length > 0 ? (
+            <View style={styles.aboutMeGrid}>
+              {aboutMeItems.map((item) => (
+                <View key={item.key} style={styles.aboutCard}>
+                  <Ionicons name={item.icon} size={20} color="#666666" />
+                  <Text style={styles.aboutCardLabel}>{item.label}</Text>
+                  <Text style={styles.aboutCardValue}>{formatPreferenceValue(item.value)}</Text>
+                </View>
+              ))}
             </View>
-
-            <View style={styles.aboutBubble}>
-              <Ionicons name="earth" size={20} color="#666666" />
-              <Text style={styles.aboutBubbleLabel}>Ethnicity</Text>
-              <Text style={styles.aboutBubbleValue}>Hispanic/Latina</Text>
-            </View>
-
-            <View style={styles.aboutBubble}>
-              <Ionicons name="ribbon" size={20} color="#666666" />
-              <Text style={styles.aboutBubbleLabel}>Religion</Text>
-              <Text style={styles.aboutBubbleValue}>Christian</Text>
-            </View>
-
-            <View style={styles.aboutBubble}>
-              <Ionicons name="flag" size={20} color="#666666" />
-              <Text style={styles.aboutBubbleLabel}>Political Views</Text>
-              <Text style={styles.aboutBubbleValue}>Moderate</Text>
-            </View>
-
-            <View style={styles.aboutBubble}>
-              <Ionicons name="people" size={20} color="#666666" />
-              <Text style={styles.aboutBubbleLabel}>Family Plans</Text>
-              <Text style={styles.aboutBubbleValue}>Wants kids someday</Text>
-            </View>
-
-            <View style={styles.aboutBubble}>
-              <Ionicons name="fitness" size={20} color="#666666" />
-              <Text style={styles.aboutBubbleLabel}>Lifestyle</Text>
-              <Text style={styles.aboutBubbleValue}>Exercises 3-4x/week</Text>
-              <Text style={styles.aboutBubbleValue}>Non-smoker</Text>
-              <Text style={styles.aboutBubbleValue}>Drinks socially</Text>
-            </View>
-
-            <View style={styles.aboutBubble}>
-              <Ionicons name="school" size={20} color="#666666" />
-              <Text style={styles.aboutBubbleLabel}>Education</Text>
-              <Text style={styles.aboutBubbleValue}>MBA - Marketing</Text>
-              <Text style={styles.aboutBubbleValue}>Professional</Text>
-            </View>
-          </ScrollView>
+          ) : (
+            <Text style={styles.aboutMeEmpty}>No preferences added yet.</Text>
+          )}
         </View>
 
-        <View style={styles.interestsSection}>
-          <Text style={styles.sectionTitle}>Interests</Text>
-          <View style={styles.interestsContainer}>
-            <View style={styles.interestTag}>
-              <Text style={styles.interestTagText}>Reading</Text>
-            </View>
-            <View style={styles.interestTag}>
-              <Text style={styles.interestTagText}>Writing</Text>
-            </View>
-            <View style={styles.interestTag}>
-              <Text style={styles.interestTagText}>Literature</Text>
-            </View>
-            <View style={styles.interestTag}>
-              <Text style={styles.interestTagText}>Coffee</Text>
+        {interests.length > 0 && (
+          <View style={styles.interestsSection}>
+            <Text style={styles.sectionTitle}>Interests</Text>
+            <View style={styles.interestsContainer}>
+              {interests.map((interest, index) => (
+                <View key={index} style={styles.interestTag}>
+                  <Text style={styles.interestTagText}>
+                    {typeof interest === 'string' ? interest : interest.name || interest}
+                  </Text>
+                </View>
+              ))}
             </View>
           </View>
-        </View>
+        )}
 
-        <View style={styles.photosSection}>
-          <Text style={styles.sectionTitle}>Additional Photos</Text>
-          <View style={styles.photosContainer}>
-            <View style={styles.photoCard}>
-              <Ionicons name="image" size={80} color="#cccccc" />
-            </View>
-            <View style={styles.photoCard}>
-              <Ionicons name="image" size={80} color="#cccccc" />
-            </View>
-            <View style={styles.photoCard}>
-              <Ionicons name="image" size={80} color="#cccccc" />
-            </View>
-            <View style={styles.photoCard}>
-              <Ionicons name="image" size={80} color="#cccccc" />
+        {photos.length > 1 && (
+          <View style={styles.photosSection}>
+            <Text style={styles.sectionTitle}>Additional Photos</Text>
+            <View style={styles.photosContainer}>
+              {photos.slice(1).map((photo, index) => (
+                <View key={index} style={styles.photoCard}>
+                  {photo ? (
+                    <Image source={{ uri: photo }} style={styles.photoImage} resizeMode="cover" />
+                  ) : (
+                    <Ionicons name="image" size={80} color="#cccccc" />
+                  )}
+                </View>
+              ))}
             </View>
           </View>
-        </View>
+        )}
       </ScrollView>
 
       <View style={styles.callControls}>
@@ -166,6 +228,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#ffffff',
     paddingTop: 50,
+  },
+  loadingContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#666666',
+  },
+  errorText: {
+    marginTop: 12,
+    fontSize: 14,
+    color: '#ff4444',
+    textAlign: 'center',
   },
   callTopBar: {
     flexDirection: 'row',
@@ -302,26 +380,23 @@ const styles = StyleSheet.create({
     color: '#000000',
     marginBottom: 12,
   },
-  aboutMeScroll: {
-    marginHorizontal: -20,
-    paddingLeft: 20,
-  },
-  aboutMeContent: {
-    paddingRight: 20,
+  aboutMeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
   },
-  aboutBubble: {
-    backgroundColor: '#f5f5f5',
-    paddingHorizontal: 16,
+  aboutCard: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
     paddingVertical: 16,
     borderRadius: 16,
-    minWidth: 160,
-    maxWidth: 200,
     alignItems: 'center',
+    justifyContent: 'center',
+    flexBasis: '48%',
     borderWidth: 1,
     borderColor: '#e0e0e0',
   },
-  aboutBubbleLabel: {
+  aboutCardLabel: {
     fontSize: 14,
     fontWeight: '600',
     color: '#000000',
@@ -329,11 +404,15 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     textAlign: 'center',
   },
-  aboutBubbleValue: {
+  aboutCardValue: {
     fontSize: 13,
     color: '#666666',
     textAlign: 'center',
     lineHeight: 18,
+  },
+  aboutMeEmpty: {
+    fontSize: 14,
+    color: '#666666',
   },
   interestsSection: {
     marginBottom: 24,
@@ -372,6 +451,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e0e0e0',
     marginBottom: 12,
+  },
+  photoImage: {
+    width: '100%',
+    height: '100%',
   },
   callControls: {
     position: 'absolute',

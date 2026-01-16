@@ -809,6 +809,38 @@ export default function CallView({
     isVerified: false,
   };
 
+  const formatPreferenceValue = (value) => {
+    if (Array.isArray(value)) {
+      return value.filter(Boolean).join(', ');
+    }
+    if (value === true) return 'Yes';
+    if (value === false) return 'No';
+    if (value === null || value === undefined || value === '') return '';
+    return String(value);
+  };
+
+  const aboutMeItems = [
+    { key: 'education', label: 'Education', value: profile.educationLevel, icon: 'school' },
+    { key: 'religion', label: 'Religion', value: profile.religion, icon: 'ribbon' },
+    { key: 'familyPlans', label: 'Family Plans', value: profile.familyPlans, icon: 'people' },
+    { key: 'hasKids', label: 'Have Kids', value: profile.hasKids, icon: 'heart' },
+    { key: 'ethnicity', label: 'Ethnicity', value: profile.ethnicity, icon: 'globe' },
+    { key: 'politicalViews', label: 'Political Views', value: profile.politicalViews, icon: 'flag' },
+    { key: 'exercise', label: 'Exercise', value: profile.exercise, icon: 'fitness' },
+    { key: 'smoking', label: 'Smoking', value: profile.smoking, icon: 'ban' },
+    { key: 'drinking', label: 'Drinking', value: profile.drinking, icon: 'wine' },
+    { key: 'languages', label: 'Languages', value: profile.languages, icon: 'chatbubbles' },
+  ];
+  const visibleAboutMeItems = aboutMeItems.filter((item) => formatPreferenceValue(item.value));
+
+  console.log('[CallView]', {
+    file: 'CallView.js',
+    aboutMeItems: visibleAboutMeItems.map((item) => ({
+      key: item.key,
+      value: item.value,
+    })),
+  });
+
   return (
     <View style={styles.callContainer}>
       <View style={styles.callTopBar}>
@@ -991,102 +1023,29 @@ export default function CallView({
         ) : null}
 
         {/* About Me Section (Preferences) - Carousel */}
-        {(profile.educationLevel || profile.religion || profile.familyPlans || profile.ethnicity || 
-          profile.politicalViews || profile.exercise || profile.smoking || profile.drinking || 
-          profile.hasKids || (profile.languages && profile.languages.length > 0)) ? (
-          <View style={styles.preferencesSection}>
-            <Text style={styles.sectionTitle}>About Me</Text>
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false} 
+        <View style={styles.preferencesSection}>
+          <Text style={styles.sectionTitle}>About Me</Text>
+          {visibleAboutMeItems.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
               style={styles.preferencesCarousel}
               contentContainerStyle={styles.preferencesCarouselContent}
             >
-              {profile.educationLevel && (
-                <View style={styles.preferenceCard}>
-                  <Ionicons name="school" size={24} color="#666666" />
-                  <Text style={styles.preferenceCardTitle}>Education</Text>
-                  <Text style={styles.preferenceCardValue}>{profile.educationLevel}</Text>
-                </View>
-              )}
-              
-              {profile.religion && (
-                <View style={styles.preferenceCard}>
-                  <Ionicons name="ribbon" size={24} color="#666666" />
-                  <Text style={styles.preferenceCardTitle}>Religion</Text>
-                  <Text style={styles.preferenceCardValue}>{profile.religion}</Text>
-                </View>
-              )}
-              
-              {profile.familyPlans && (
-                <View style={styles.preferenceCard}>
-                  <Ionicons name="people" size={24} color="#666666" />
-                  <Text style={styles.preferenceCardTitle}>Family Plans</Text>
-                  <Text style={styles.preferenceCardValue}>{profile.familyPlans}</Text>
-                </View>
-              )}
-              
-              {profile.hasKids !== null && profile.hasKids !== undefined && (
-                <View style={styles.preferenceCard}>
-                  <Ionicons name="heart" size={24} color="#666666" />
-                  <Text style={styles.preferenceCardTitle}>Have Kids</Text>
-                  <Text style={styles.preferenceCardValue}>{profile.hasKids ? 'Yes' : 'No'}</Text>
-                </View>
-              )}
-              
-              {profile.ethnicity && (
-                <View style={styles.preferenceCard}>
-                  <Ionicons name="globe" size={24} color="#666666" />
-                  <Text style={styles.preferenceCardTitle}>Ethnicity</Text>
-                  <Text style={styles.preferenceCardValue}>{profile.ethnicity}</Text>
-                </View>
-              )}
-              
-              {profile.politicalViews && (
-                <View style={styles.preferenceCard}>
-                  <Ionicons name="flag" size={24} color="#666666" />
-                  <Text style={styles.preferenceCardTitle}>Political Views</Text>
-                  <Text style={styles.preferenceCardValue}>{profile.politicalViews}</Text>
-                </View>
-              )}
-              
-              {profile.exercise && (
-                <View style={styles.preferenceCard}>
-                  <Ionicons name="fitness" size={24} color="#666666" />
-                  <Text style={styles.preferenceCardTitle}>Exercise</Text>
-                  <Text style={styles.preferenceCardValue}>{profile.exercise}</Text>
-                </View>
-              )}
-              
-              {profile.smoking && (
-                <View style={styles.preferenceCard}>
-                  <Ionicons name="ban" size={24} color="#666666" />
-                  <Text style={styles.preferenceCardTitle}>Smoking</Text>
-                  <Text style={styles.preferenceCardValue}>{profile.smoking}</Text>
-                </View>
-              )}
-              
-              {profile.drinking && (
-                <View style={styles.preferenceCard}>
-                  <Ionicons name="wine" size={24} color="#666666" />
-                  <Text style={styles.preferenceCardTitle}>Drinking</Text>
-                  <Text style={styles.preferenceCardValue}>{profile.drinking}</Text>
-                </View>
-              )}
-              
-              {profile.languages && profile.languages.length > 0 && (
-                <View style={styles.preferenceCard}>
-                  <Ionicons name="chatbubbles" size={24} color="#666666" />
-                  <Text style={styles.preferenceCardTitle}>Languages</Text>
+              {visibleAboutMeItems.map((item) => (
+                <View key={item.key} style={styles.preferenceCard}>
+                  <Ionicons name={item.icon} size={24} color="#666666" />
+                  <Text style={styles.preferenceCardTitle}>{item.label}</Text>
                   <Text style={styles.preferenceCardValue} numberOfLines={2}>
-                    {profile.languages.slice(0, 2).join(', ')}
-                    {profile.languages.length > 2 ? '...' : ''}
+                    {formatPreferenceValue(item.value)}
                   </Text>
                 </View>
-              )}
+              ))}
             </ScrollView>
-          </View>
-        ) : null}
+          ) : (
+            <Text style={styles.aboutMeEmpty}>No preferences added yet.</Text>
+          )}
+        </View>
 
         {profile.interests && profile.interests.length > 0 ? (
           <View style={styles.interestsSection}>
@@ -1462,6 +1421,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#000000',
     textAlign: 'center',
+  },
+  aboutMeEmpty: {
+    fontSize: 13,
+    color: '#888888',
+    marginTop: 8,
   },
   callControls: {
     position: 'absolute',
