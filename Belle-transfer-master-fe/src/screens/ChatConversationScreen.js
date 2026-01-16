@@ -151,6 +151,7 @@ const ChatConversationScreen = ({ route }) => {
   } = useSocket();
   const {
     chatId,
+    roomId: initialRoomId,
     chatName,
     isOnline: initialIsOnline,
     profilePicture,
@@ -285,14 +286,7 @@ const ChatConversationScreen = ({ route }) => {
   const loadMessages = async (showLoading = true, retryCount = 0) => {
     if (!activeConversationId) return;
 
-    try {
-      if (showLoading) setIsLoading(true);
-
-      const data = shouldUseRoomMessages
-        ? await chatAPI.getConversationMessages(activeConversationId, 50, 0)
-        : await chatAPI.getSessionMessages(chatId, 50, 0);
-
-      // Transform to display format
+    const normalizeMessages = (data) => {
       const formattedMessages = (data || []).map((msg) => {
         const sentAt = msg.sentAt || msg.timestamp || msg.createdAt;
         return {
@@ -316,6 +310,18 @@ const ChatConversationScreen = ({ route }) => {
         return timeA - timeB;
       });
 
+      return formattedMessages;
+    };
+
+    try {
+      if (showLoading) setIsLoading(true);
+
+      const data = shouldUseRoomMessages
+        ? await chatAPI.getConversationMessages(activeConversationId, 50, 0)
+        : await chatAPI.getSessionMessages(chatId, 50, 0);
+
+      const formattedMessages = normalizeMessages(data);
+
       setMessages(formattedMessages);
 
       // Log if no messages found (might indicate an issue)
@@ -324,6 +330,23 @@ const ChatConversationScreen = ({ route }) => {
       }
     } catch (err) {
       console.error('Error loading messages:', err);
+
+      // If conversation API is forbidden, fallback to session messages
+      if (
+        shouldUseRoomMessages &&
+        chatId &&
+        (err.message?.includes('403') || err.message?.includes('Access denied'))
+      ) {
+        try {
+          console.warn('[ChatConversationScreen] Conversation access denied, falling back to session messages');
+          const fallbackData = await chatAPI.getSessionMessages(chatId, 50, 0);
+          const fallbackMessages = normalizeMessages(fallbackData);
+          setMessages(fallbackMessages);
+          return;
+        } catch (fallbackErr) {
+          console.error('[ChatConversationScreen] Failed to load session messages fallback:', fallbackErr);
+        }
+      }
 
       // Retry once if it's a network error or 500 error
       if (retryCount < 1 && (err.message?.includes('Network') || err.message?.includes('500'))) {
@@ -355,16 +378,16 @@ const ChatConversationScreen = ({ route }) => {
     setMessage(text);
     // Send typing indicator
     if (text.trim().length > 0 && activeConversationId) {
-      sendTypingStart(activeConversationId);
+      sendTypingStart(activeConversationId, chatId || null);
       // Clear typing indicator after 3 seconds of no typing
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
       typingTimeoutRef.current = setTimeout(() => {
-        sendTypingStop(activeConversationId);
+        sendTypingStop(activeConversationId, chatId || null);
       }, 3000);
     } else if (activeConversationId) {
-      sendTypingStop(activeConversationId);
+      sendTypingStop(activeConversationId, chatId || null);
     }
   };
 
@@ -375,7 +398,7 @@ const ChatConversationScreen = ({ route }) => {
     const messageText = message.trim();
     setIsSending(true);
     setMessage(''); // Clear input immediately for better UX
-    sendTypingStop(activeConversationId); // Stop typing indicator
+    sendTypingStop(activeConversationId, chatId || null); // Stop typing indicator
 
     try {
       // Optimistically add message to UI
@@ -418,7 +441,8 @@ const ChatConversationScreen = ({ route }) => {
       }
 
       // Also send via socket for real-time delivery
-      sendMessageSocket(activeConversationId, messageText);
+      const socketMetadata = chatId ? { sessionId: chatId } : null;
+      sendMessageSocket(activeConversationId, messageText, 'TEXT', socketMetadata);
     } catch (error) {
       console.error('Error sending message:', error);
       // Restore message on error
@@ -474,10 +498,10 @@ const ChatConversationScreen = ({ route }) => {
   };
 
   // Resolve sessionId to roomId for socket connections
-  const [roomId, setRoomId] = useState(chatId); // Start with chatId as fallback
+  const [roomId, setRoomId] = useState(initialRoomId || chatId); // Prefer explicit roomId when provided
   const activeConversationId = roomId || chatId;
   const shouldUseRoomMessages =
-    !!activeConversationId && String(activeConversationId).startsWith('room_');
+    !sessionId && !!activeConversationId && String(activeConversationId).startsWith('room_');
 
   // Resolve chatId (sessionId) to roomId by sending a test message or checking session
   useEffect(() => {
@@ -485,6 +509,13 @@ const ChatConversationScreen = ({ route }) => {
       if (!chatId) return;
 
       try {
+        // If we already have a roomId from navigation, keep it
+        if (initialRoomId && initialRoomId !== chatId) {
+          console.log('[ChatConversationScreen] Using roomId from navigation:', initialRoomId);
+          setRoomId(initialRoomId);
+          return;
+        }
+
         // First, try to get the session to find roomId
         try {
           const session = await sessionAPI.getSession(chatId);
@@ -507,7 +538,7 @@ const ChatConversationScreen = ({ route }) => {
     };
 
     resolveRoomId();
-  }, [chatId]);
+  }, [chatId, initialRoomId]);
 
   // Load on mount and set up Socket.IO
   useEffect(() => {
@@ -518,11 +549,17 @@ const ChatConversationScreen = ({ route }) => {
       chatAPI.markSessionAsRead(chatId).catch(console.error);
     }
 
-    // Join the conversation room via Socket.IO using roomId
+    // Join the conversation room(s) via Socket.IO using roomId and sessionId
     const socketRoomId = activeConversationId;
-    if (socketRoomId && socketConnected) {
-      console.log('[ChatConversationScreen] Joining socket room:', socketRoomId);
-      joinConversation(socketRoomId);
+    if (socketConnected) {
+      if (socketRoomId) {
+        console.log('[ChatConversationScreen] Joining socket room:', socketRoomId);
+        joinConversation(socketRoomId);
+      }
+      if (chatId && chatId !== socketRoomId) {
+        console.log('[ChatConversationScreen] Joining socket session room:', chatId);
+        joinConversation(chatId);
+      }
     }
 
     // Subscribe to real-time messages using roomId
@@ -589,8 +626,13 @@ const ChatConversationScreen = ({ route }) => {
     }
 
     return () => {
-      if (socketRoomId && socketConnected) {
-        leaveConversation(socketRoomId);
+      if (socketConnected) {
+        if (socketRoomId) {
+          leaveConversation(socketRoomId);
+        }
+        if (chatId && chatId !== socketRoomId) {
+          leaveConversation(chatId);
+        }
       }
       unsubscribe();
       unsubscribeChatId();
@@ -602,9 +644,14 @@ const ChatConversationScreen = ({ route }) => {
   // Separate effect to ensure join happens when socket connects
   useEffect(() => {
     const socketRoomId = activeConversationId;
-    if (socketRoomId && socketConnected) {
+    if (socketConnected && (socketRoomId || chatId)) {
       const timeoutId = setTimeout(() => {
-        joinConversation(socketRoomId);
+        if (socketRoomId) {
+          joinConversation(socketRoomId);
+        }
+        if (chatId && chatId !== socketRoomId) {
+          joinConversation(chatId);
+        }
       }, 100);
       return () => clearTimeout(timeoutId);
     }
@@ -612,14 +659,29 @@ const ChatConversationScreen = ({ route }) => {
 
   // Update typing indicator state based on socket typing users
   useEffect(() => {
-    if (!activeConversationId || !actualOtherUserId) {
+    if (!actualOtherUserId) {
       setIsTyping(false);
       return;
     }
-    const typing = getTypingUsersInConversation(activeConversationId);
-    const otherUserTyping = typing.some((t) => t.userId === actualOtherUserId);
+
+    const possibleIds = [
+      activeConversationId,
+      roomId,
+      chatId,
+    ].filter(Boolean);
+
+    let otherUserTyping = false;
+    if (typingUsers) {
+      typingUsers.forEach((data, key) => {
+        const [convId, userId] = key.split(':');
+        if (userId === actualOtherUserId && possibleIds.includes(convId)) {
+          otherUserTyping = true;
+        }
+      });
+    }
+
     setIsTyping(otherUserTyping);
-  }, [activeConversationId, actualOtherUserId, getTypingUsersInConversation, typingUsers]);
+  }, [activeConversationId, roomId, chatId, actualOtherUserId, typingUsers]);
 
   // Auto-join call if requested
   useEffect(() => {

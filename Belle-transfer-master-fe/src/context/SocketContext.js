@@ -196,38 +196,34 @@ export const SocketProvider = ({ children }) => {
 
     // Listen for messages
     onMessageReceived((data) => {
+      const possibleIds = new Set(
+        [
+          data.conversationId,
+          data.roomId,
+          data?.metadata?.sessionId,
+          data?.metadata?.roomId,
+        ].filter(Boolean)
+      );
+
       console.log('[SocketContext] Message received:', {
         conversationId: data.conversationId,
         roomId: data.roomId,
         senderId: data.senderId,
-        registeredIds: Array.from(messageCallbacks.current.keys())
+        possibleIds: Array.from(possibleIds),
+        registeredIds: Array.from(messageCallbacks.current.keys()),
       });
 
-      // Try to find callbacks by conversationId first, then by roomId
-      // This handles cases where frontend subscribes with sessionId but backend emits with roomId
-      let callbacks = messageCallbacks.current.get(data.conversationId) || [];
+      const callbackSet = new Set();
+      possibleIds.forEach((id) => {
+        const cbs = messageCallbacks.current.get(id) || [];
+        cbs.forEach((cb) => callbackSet.add(cb));
+      });
 
-      // If no callbacks found and we have a roomId, try that too
-      if (callbacks.length === 0 && data.roomId && data.roomId !== data.conversationId) {
-        callbacks = messageCallbacks.current.get(data.roomId) || [];
-        console.log('[SocketContext] Trying roomId for callbacks:', data.roomId, 'found:', callbacks.length);
-      }
-
-      // Also check all registered IDs - if any match the conversationId or roomId, use those callbacks
+      const callbacks = Array.from(callbackSet);
       if (callbacks.length === 0) {
-        messageCallbacks.current.forEach((cbs, registeredId) => {
-          if (registeredId === data.conversationId || registeredId === data.roomId) {
-            callbacks = cbs;
-            console.log('[SocketContext] Found callbacks for registeredId:', registeredId);
-          }
-        });
-      }
-
-      if (callbacks.length === 0) {
-        console.warn('[SocketContext] No callbacks registered for conversationId/roomId:', {
-          conversationId: data.conversationId,
-          roomId: data.roomId,
-          registeredIds: Array.from(messageCallbacks.current.keys())
+        console.warn('[SocketContext] No callbacks registered for message IDs:', {
+          possibleIds: Array.from(possibleIds),
+          registeredIds: Array.from(messageCallbacks.current.keys()),
         });
       } else {
         console.log('[SocketContext] Calling', callbacks.length, 'callbacks for message');

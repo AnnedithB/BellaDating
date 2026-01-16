@@ -1241,6 +1241,7 @@ export const sessionAPI = {
           type
           status
           startedAt
+          metadata
           user1 {
             id
             name
@@ -1273,6 +1274,7 @@ export const sessionAPI = {
           startedAt
           endedAt
           duration
+          metadata
           user1 {
             id
             name

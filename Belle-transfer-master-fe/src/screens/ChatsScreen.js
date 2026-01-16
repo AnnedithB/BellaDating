@@ -130,8 +130,13 @@ export default function ChatsScreen({ navigation }) {
       });
 
       // Add session chats (higher priority - overwrites conversations)
+      // Keep the conversation roomId when available so both users join the same chat room.
       sessionChats.forEach((chat) => {
         if (!chat.otherUserId) return;
+        const existing = chatMap.get(chat.otherUserId);
+        if (existing?.roomId && existing.roomId !== chat.roomId) {
+          chat.roomId = existing.roomId;
+        }
         chatMap.set(chat.otherUserId, chat);
       });
 

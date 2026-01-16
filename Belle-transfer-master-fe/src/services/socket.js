@@ -140,17 +140,17 @@ export const leaveConversation = (conversationId) => {
 /**
  * Send typing start indicator
  */
-export const sendTypingStart = (conversationId) => {
+export const sendTypingStart = (conversationId, sessionId = null) => {
   if (!socket?.connected) return;
-  socket.emit('typing:start', { conversationId });
+  socket.emit('typing:start', { conversationId, sessionId });
 };
 
 /**
  * Send typing stop indicator
  */
-export const sendTypingStop = (conversationId) => {
+export const sendTypingStop = (conversationId, sessionId = null) => {
   if (!socket?.connected) return;
-  socket.emit('typing:stop', { conversationId });
+  socket.emit('typing:stop', { conversationId, sessionId });
 };
 
 // ==================== Message Events ====================

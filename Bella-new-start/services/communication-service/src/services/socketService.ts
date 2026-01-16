@@ -206,12 +206,12 @@ export class SocketService {
     });
 
     // Typing indicators
-    socket.on('typing:start', (data: { conversationId: string }) => {
-      this.handleTypingStart(socket, data.conversationId);
+    socket.on('typing:start', (data: { conversationId: string; sessionId?: string }) => {
+      this.handleTypingStart(socket, data.conversationId, data.sessionId);
     });
 
-    socket.on('typing:stop', (data: { conversationId: string }) => {
-      this.handleTypingStop(socket, data.conversationId);
+    socket.on('typing:stop', (data: { conversationId: string; sessionId?: string }) => {
+      this.handleTypingStop(socket, data.conversationId, data.sessionId);
     });
 
     // Message events
@@ -994,7 +994,7 @@ export class SocketService {
     });
   }
 
-  private handleTypingStart(socket: AuthenticatedSocket, conversationId: string): void {
+  private handleTypingStart(socket: AuthenticatedSocket, conversationId: string, sessionId?: string): void {
     if (!socket.userId) return;
 
     const user = this.connectedUsers.get(socket.userId);
@@ -1004,13 +1004,16 @@ export class SocketService {
       this.connectedUsers.set(socket.userId, user);
     }
 
-    socket.to(`conversation:${conversationId}`).emit('typing:start', {
-      userId: socket.userId,
-      conversationId
+    const targets = new Set<string>([conversationId, sessionId].filter(Boolean) as string[]);
+    targets.forEach((targetId) => {
+      socket.to(`conversation:${targetId}`).emit('typing:start', {
+        userId: socket.userId,
+        conversationId: targetId
+      });
     });
   }
 
-  private handleTypingStop(socket: AuthenticatedSocket, conversationId: string): void {
+  private handleTypingStop(socket: AuthenticatedSocket, conversationId: string, sessionId?: string): void {
     if (!socket.userId) return;
 
     const user = this.connectedUsers.get(socket.userId);
@@ -1020,9 +1023,12 @@ export class SocketService {
       this.connectedUsers.set(socket.userId, user);
     }
 
-    socket.to(`conversation:${conversationId}`).emit('typing:stop', {
-      userId: socket.userId,
-      conversationId
+    const targets = new Set<string>([conversationId, sessionId].filter(Boolean) as string[]);
+    targets.forEach((targetId) => {
+      socket.to(`conversation:${targetId}`).emit('typing:stop', {
+        userId: socket.userId,
+        conversationId: targetId
+      });
     });
   }
 
@@ -1032,14 +1038,18 @@ export class SocketService {
 
       const { conversationId, content, type = 'TEXT', metadata } = data;
 
-      // Broadcast message to conversation participants
-      socket.to(`conversation:${conversationId}`).emit('message:received', {
-        senderId: socket.userId,
-        conversationId,
-        content,
-        type,
-        metadata,
-        timestamp: new Date()
+      const sessionId = metadata?.sessionId;
+      const targets = new Set<string>([conversationId, sessionId].filter(Boolean) as string[]);
+      targets.forEach((targetId) => {
+        // Broadcast message to conversation participants
+        socket.to(`conversation:${targetId}`).emit('message:received', {
+          senderId: socket.userId,
+          conversationId: targetId,
+          content,
+          type,
+          metadata,
+          timestamp: new Date()
+        });
       });
 
       logger.info('Message sent via socket', {
