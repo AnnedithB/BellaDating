@@ -1,0 +1,282 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+  binaryTargets   = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                      String   @id @default(cuid())
+  email                   String   @unique
+  passwordHash            String   @map("password_hash")
+  permissionRole          PermissionRole   @default(user) @map("permission_role")
+  isActive                Boolean  @default(true) @map("is_active")
+  isPhotoVerified         Boolean  @default(false) @map("is_photo_verified")
+  photoVerificationAttempts Int    @default(0) @map("photo_verification_attempts")
+  photoVerifiedAt         DateTime? @map("photo_verified_at")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+  lastLogin               DateTime? @map("last_login")
+  profile                 Profile?
+
+  @@map("users")
+}
+
+model Profile {
+  id                        String   @id @default(cuid())
+  userId                    String   @unique @map("user_id")
+  displayName               String?  @map("display_name")
+  shortBio                  String?  @map("short_bio")
+  photos                    Json    @default("[]")
+  videos                    Json    @default("[]")
+  intent                    String?  // CASUAL | FRIENDS | SERIOUS | NETWORKING
+  age                       Int?
+  locationCity              String?  @map("location_city")
+  locationCountry           String?  @map("location_country")
+  preferences               Json?    @default("{}")
+  // Dating-specific fields
+  gender                    String?  // MAN | WOMAN | NONBINARY
+  relationshipIntents       String[] @default([]) @map("relationship_intents")
+  familyPlans               String?  @map("family_plans")
+  religion                  String?
+  educationLevel            String?  @map("education_level")
+  politicalViews            String?  @map("political_views")
+  exercise                  String?
+  smoking                   String?
+  drinking                  String?
+  // Partner preferences
+  preferredGenders          String[] @default([]) @map("preferred_genders")
+  preferredRelationshipIntents String[] @default([]) @map("preferred_relationship_intents")
+  preferredFamilyPlans      String[] @default([]) @map("preferred_family_plans")
+  preferredReligions        String[] @default([]) @map("preferred_religions")
+  preferredEducationLevels  String[] @default([]) @map("preferred_education_levels")
+  preferredPoliticalViews   String[] @default([]) @map("preferred_political_views")
+  preferredExerciseHabits   String[] @default([]) @map("preferred_exercise_habits")
+  preferredSmokingHabits     String[] @default([]) @map("preferred_smoking_habits")
+  preferredDrinkingHabits   String[] @default([]) @map("preferred_drinking_habits")
+  preferredMinAge            Int?     @map("preferred_min_age")
+  preferredMaxAge            Int?     @map("preferred_max_age")
+  isPremium                  Boolean  @default(false) @map("is_premium")
+  createdAt                  DateTime @default(now()) @map("created_at")
+  updatedAt                  DateTime @updatedAt @map("updated_at")
+  
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("profiles")
+}
+
+model analytics_events {
+  id              String   @id
+  user_id         String?
+  session_id      String?
+  event_name      String
+  payload         Json?
+  event_timestamp DateTime @default(now())
+  ip_address      String?
+  user_agent      String?
+  created_at      DateTime @default(now())
+
+  @@index([event_name, event_timestamp])
+  @@index([event_timestamp])
+  @@index([user_id, event_timestamp])
+}
+
+model chat_messages {
+  id                   String               @id
+  sessionId            String
+  senderId             String
+  recipientId          String?
+  content              String
+  messageType          MessageType          @default(TEXT)
+  timestamp            DateTime             @default(now())
+  voiceUrl             String?
+  voiceDuration        Int?
+  isModerated          Boolean              @default(false)
+  moderationReason     String?
+  toxicityScore        Float?
+  interaction_sessions interaction_sessions @relation(fields: [sessionId], references: [sessionId], onDelete: Cascade)
+}
+
+model interaction_sessions {
+  id               String            @id
+  sessionId        String            @unique
+  type             SessionType
+  status           SessionStatus
+  userId1          String
+  userId2          String?
+  startedAt        DateTime          @default(now())
+  endedAt          DateTime?
+  duration         Int?
+  avgLatency       Float?
+  connectionIssues Boolean           @default(false)
+  bandwidthUsage   Float?
+  videoEnabled     Boolean           @default(true)
+  audioEnabled     Boolean           @default(true)
+  textChatUsed     Boolean           @default(false)
+  screenShareUsed  Boolean           @default(false)
+  userCountry1     String?
+  userCountry2     String?
+  timezone1        String?
+  timezone2        String?
+  chat_messages    chat_messages[]
+  report_incidents report_incidents?
+  user_actions     user_actions[]
+}
+
+model report_incidents {
+  id                   String                @id
+  reporterId           String
+  reportedUserId       String?
+  sessionId            String?               @unique
+  reportType           ReportType
+  reason               String
+  description          String?
+  status               ReportStatus          @default(PENDING)
+  severity             Severity              @default(MEDIUM)
+  reviewedBy           String?
+  reviewedAt           DateTime?
+  resolution           String?
+  actionTaken          String?
+  evidenceUrls         String[]
+  chatSnapshot         Json?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime
+  interaction_sessions interaction_sessions? @relation(fields: [sessionId], references: [sessionId])
+}
+
+model system_metrics {
+  id             String   @id
+  timestamp      DateTime @default(now())
+  activeSessions Int
+  avgLatency     Float
+  serverLoad     Float
+  memoryUsage    Float
+  cpuUsage       Float
+  newUsersToday  Int
+  sessionsToday  Int
+  errorRate      Float
+  topCountries   Json
+}
+
+model user_actions {
+  id                   String                @id
+  userId               String
+  sessionId            String?
+  actionType           ActionType
+  timestamp            DateTime              @default(now())
+  metadata             Json?
+  userAgent            String?
+  ipAddress            String?
+  country              String?
+  interaction_sessions interaction_sessions? @relation(fields: [sessionId], references: [sessionId])
+}
+
+model user_analytics {
+  id                 String    @id
+  userId             String    @unique
+  totalSessions      Int       @default(0)
+  totalDuration      Int       @default(0)
+  avgSessionLength   Float     @default(0)
+  lastActiveAt       DateTime?
+  sessionsThisWeek   Int       @default(0)
+  sessionsThisMonth  Int       @default(0)
+  avgRating          Float?
+  completedSessions  Int       @default(0)
+  skippedSessions    Int       @default(0)
+  reportsReceived    Int       @default(0)
+  reportsMade        Int       @default(0)
+  isBanned           Boolean   @default(false)
+  banReason          String?
+  banExpiresAt       DateTime?
+  preferredCountries String[]
+  timeZone           String?
+  voiceChatUsage     Int       @default(0)
+  textChatUsage      Int       @default(0)
+  videoCallUsage     Int       @default(0)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime
+}
+
+enum PermissionRole {
+  user
+  admin
+
+  @@map("PermissionRole")
+}
+
+enum MessageType {
+  TEXT
+  VOICE
+  IMAGE
+  EMOJI
+  SYSTEM
+
+  @@map("MessageType")
+}
+
+enum ReportStatus {
+  PENDING
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+  ESCALATED
+
+  @@map("ReportStatus")
+}
+
+enum ActionType {
+  LOGIN
+  LOGOUT
+  START_SESSION
+  END_SESSION
+  SKIP_USER
+  REPORT_USER
+  RATE_SESSION
+  UPDATE_PROFILE
+  CHANGE_SETTINGS
+  PURCHASE_PREMIUM
+  USE_FILTER
+  SEND_MESSAGE
+  MAKE_CALL
+  SCREEN_SHARE
+}
+
+enum ReportType {
+  INAPPROPRIATE_CONTENT
+  HARASSMENT
+  SPAM
+  NUDITY
+  VIOLENCE
+  HATE_SPEECH
+  UNDERAGE_USER
+  FAKE_PROFILE
+  TECHNICAL_ISSUE
+  OTHER
+}
+
+enum SessionStatus {
+  WAITING
+  CONNECTED
+  ENDED
+  INTERRUPTED
+  REPORTED
+}
+
+enum SessionType {
+  VIDEO_CALL
+  VOICE_CALL
+  TEXT_CHAT
+  RANDOM_MATCH
+  INTEREST_MATCH
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}

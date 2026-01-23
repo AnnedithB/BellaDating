@@ -1,0 +1,203 @@
+// This is your Prisma schema file for Queuing Service
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enhanced User Preferences for Advanced Dating Matching
+model UserMatchingPreferences {
+  id                String    @id @default(uuid())
+  userId            String    @unique @map("user_id")
+  
+  // Age preferences
+  minAge            Int       @default(18) @map("min_age")
+  maxAge            Int       @default(65) @map("max_age")
+  
+  // Location preferences
+  maxRadius         Int       @default(50) @map("max_radius") // in kilometers
+  currentLatitude   Float?    @map("current_latitude")
+  currentLongitude  Float?    @map("current_longitude")
+  
+  // Interest preferences (JSON array of strings)
+  interests         Json      @default("[]")
+  preferredInterests Json     @default("[]") @map("preferred_interests")
+  
+  // Language preferences
+  languages         Json      @default("[]") // User's languages
+  preferredLanguages Json     @default("[]") @map("preferred_languages")
+  
+  // Ethnicity preferences (prioritization, not exclusion)
+  ethnicity         String?   // User's ethnicity
+  preferredEthnicities Json   @default("[]") @map("preferred_ethnicities")
+  ethnicityImportance Float   @default(0.0) @map("ethnicity_importance") // 0.0 to 1.0
+  
+  // Dating-specific preferences (partner preferences)
+  preferredGenders         Json  @default("[]") @map("preferred_genders")
+  preferredRelationshipIntents Json @default("[]") @map("preferred_relationship_intents")
+  preferredFamilyPlans     Json  @default("[]") @map("preferred_family_plans")
+  preferredReligions       Json  @default("[]") @map("preferred_religions")
+  preferredEducationLevels Json  @default("[]") @map("preferred_education_levels")
+  preferredPoliticalViews  Json  @default("[]") @map("preferred_political_views")
+  preferredExerciseHabits  Json  @default("[]") @map("preferred_exercise_habits")
+  preferredSmokingHabits   Json  @default("[]") @map("preferred_smoking_habits")
+  preferredDrinkingHabits  Json  @default("[]") @map("preferred_drinking_habits")
+  preferredMinAge          Int?  @map("preferred_min_age")
+  preferredMaxAge          Int?  @map("preferred_max_age")
+  
+  // Premium user features
+  isPremiumUser     Boolean   @default(false) @map("is_premium_user")
+  premiumExpiry     DateTime? @map("premium_expiry")
+  
+  // Matching weights (how important each factor is to the user)
+  ageWeight         Float     @default(0.15) @map("age_weight")
+  locationWeight    Float     @default(0.20) @map("location_weight")
+  interestWeight    Float     @default(0.10) @map("interest_weight")
+  languageWeight    Float     @default(0.05) @map("language_weight")
+  // Dating-specific weights
+  genderWeight      Float     @default(0.25) @map("gender_weight")
+  relationshipIntentWeight Float @default(0.15) @map("relationship_intent_weight")
+  lifestyleWeight   Float     @default(0.10) @map("lifestyle_weight") // exercise, smoking, drinking
+  
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@map("user_matching_preferences")
+}
+
+// Queue entries for users waiting to be matched
+model QueueEntry {
+  id                String      @id @default(uuid())
+  userId            String      @map("user_id")
+  intent            Intent      @default(CASUAL)
+  gender            DatingGender?  // Updated to use dating-specific gender enum
+  status            QueueStatus @default(WAITING)
+  
+  // Cached user data for faster matching
+  age               Int?
+  latitude          Float?
+  longitude         Float?
+  interests         Json        @default("[]")
+  languages         Json        @default("[]")
+  ethnicity         String?
+  
+  // Cached dating-specific data
+  relationshipIntents Json      @default("[]") @map("relationship_intents")
+  familyPlans       String?    @map("family_plans")
+  religion          String?
+  educationLevel    String?    @map("education_level")
+  politicalViews    String?    @map("political_views")
+  exercise          String?
+  smoking           String?
+  drinking          String?
+  isPremiumUser     Boolean    @default(false) @map("is_premium_user")
+  
+  // Matching metadata
+  priority          Int         @default(0) // Higher priority = matched first
+  attempts          Int         @default(0) // Number of match attempts
+  lastMatchAttempt  DateTime?   @map("last_match_attempt")
+  
+  // Timestamps
+  enteredAt         DateTime    @default(now()) @map("entered_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+  expiresAt         DateTime?   @map("expires_at")
+
+  @@index([status, intent, gender])
+  @@index([enteredAt])
+  @@index([priority])
+  @@index([isPremiumUser]) // Index for premium user prioritization
+  @@map("queue_entries")
+}
+
+// Match results and scoring
+model MatchAttempt {
+  id                String      @id @default(uuid())
+  user1Id           String      @map("user1_id")
+  user2Id           String      @map("user2_id")
+  
+  // Basic matching scores
+  totalScore        Float       @map("total_score")
+  ageScore          Float       @map("age_score")
+  locationScore     Float       @map("location_score")
+  interestScore     Float       @map("interest_score")
+  languageScore     Float       @map("language_score")
+  ethnicityScore    Float       @map("ethnicity_score")
+  
+  // Dating-specific compatibility scores
+  genderCompatScore      Float  @map("gender_compat_score")
+  relationshipIntentScore Float @map("relationship_intent_score")
+  familyPlansScore       Float  @map("family_plans_score")
+  religionScore          Float  @map("religion_score")
+  educationScore         Float  @map("education_score")
+  politicalScore         Float  @map("political_score")
+  lifestyleScore         Float  @map("lifestyle_score") // composite of exercise, smoking, drinking
+  
+  // Premium features impact
+  premiumBonus      Float       @map("premium_bonus")
+  
+  // Match result
+  status            MatchStatus @default(PROPOSED)
+  acceptedAt        DateTime?   @map("accepted_at")
+  rejectedAt        DateTime?   @map("rejected_at")
+  
+  // Metadata
+  algorithm         String      @default("advanced_v1") // Algorithm version used
+  metadata          Json        @default("{}")
+  
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+
+  @@index([totalScore])
+  @@index([createdAt])
+  @@map("match_attempts")
+}
+
+// Enums
+enum Intent {
+  CASUAL
+  FRIENDS
+  SERIOUS
+  NETWORKING
+
+  @@map("intent")
+}
+
+enum DatingGender {
+  MAN
+  WOMAN
+  NONBINARY
+
+  @@map("dating_gender")
+}
+
+enum UserGender {
+  MALE
+  FEMALE
+  OTHER
+
+  @@map("user_gender")
+}
+
+enum QueueStatus {
+  WAITING
+  MATCHED
+  EXPIRED
+  REMOVED
+
+  @@map("queue_status")
+}
+
+enum MatchStatus {
+  PROPOSED
+  ACCEPTED
+  REJECTED
+  EXPIRED
+
+  @@map("match_status")
+}

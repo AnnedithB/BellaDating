@@ -1,0 +1,311 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Chat Rooms (for conversations between users)
+model ChatRoom {
+  id          String   @id @default(cuid())
+  roomId      String   @unique
+  type        RoomType @default(PRIVATE)
+  name        String?
+  description String?
+  
+  // Participants
+  participant1Id String
+  participant2Id String?
+  
+  // Room Settings
+  isActive    Boolean  @default(true)
+  isArchived  Boolean  @default(false)
+  lastActivity DateTime @default(now())
+  
+  // Privacy & Moderation
+  isModerated Boolean  @default(false)
+  allowVoiceNotes Boolean @default(true)
+  allowImages     Boolean @default(true)
+  maxMessageLength Int   @default(1000)
+  
+  // Metadata
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  messages    Message[]
+  participants UserRoom[]
+  
+  @@map("chat_rooms")
+}
+
+// User participation in rooms
+model UserRoom {
+  id            String   @id @default(cuid())
+  userId        String
+  roomId        String
+  role          UserRole @default(MEMBER)
+  
+  // User Settings
+  mutedUntil    DateTime?
+  isBanned      Boolean  @default(false)
+  lastReadAt    DateTime @default(now())
+  
+  // Notifications
+  notificationsEnabled Boolean @default(true)
+  
+  joinedAt      DateTime @default(now())
+  
+  // Relations
+  room          ChatRoom @relation(fields: [roomId], references: [roomId], onDelete: Cascade)
+  
+  @@unique([userId, roomId])
+  @@map("user_rooms")
+}
+
+// Messages within chat rooms
+model Message {
+  id            String      @id @default(cuid())
+  messageId     String      @unique @default(cuid())
+  roomId        String
+  senderId      String
+  
+  // Message Content
+  content       String
+  messageType   MessageType @default(TEXT)
+  
+  // Voice Message specific
+  voiceUrl      String?
+  voiceDuration Int?        // Duration in seconds
+  voiceSize     Int?        // File size in bytes
+  
+  // Image Message specific
+  imageUrl      String?
+  imageWidth    Int?
+  imageHeight   Int?
+  imageSize     Int?
+  
+  // Delivery & Read Status
+  deliveredAt   DateTime?
+  readAt        DateTime?
+  isDelivered   Boolean     @default(false)
+  isRead        Boolean     @default(false)
+  
+  // Message Status
+  isEdited      Boolean     @default(false)
+  isDeleted     Boolean     @default(false)
+  deletedAt     DateTime?
+  editedAt      DateTime?
+  
+  // Moderation
+  isModerated   Boolean     @default(false)
+  moderationReason String?
+  toxicityScore    Float?
+  flaggedAt        DateTime?
+  
+  // Threading (for replies)
+  replyToId     String?
+  threadCount   Int         @default(0)
+  
+  // Metadata
+  metadata      Json?       // Additional message data
+  timestamp     DateTime    @default(now())
+  
+  // Relations
+  room          ChatRoom    @relation(fields: [roomId], references: [roomId], onDelete: Cascade)
+  replyTo       Message?    @relation("MessageReplies", fields: [replyToId], references: [messageId])
+  replies       Message[]   @relation("MessageReplies")
+  reactions     MessageReaction[]
+  
+  @@map("messages")
+}
+
+// Message reactions (like, heart, etc.)
+model MessageReaction {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  emoji     String   // Unicode emoji
+  createdAt DateTime @default(now())
+  
+  // Relations
+  message   Message  @relation(fields: [messageId], references: [messageId], onDelete: Cascade)
+  
+  @@unique([messageId, userId, emoji])
+  @@map("message_reactions")
+}
+
+// Voice Note Processing Jobs
+model VoiceNoteJob {
+  id            String      @id @default(cuid())
+  messageId     String      @unique
+  originalUrl   String
+  processedUrl  String?
+  
+  status        ProcessingStatus @default(PENDING)
+  fileSize      Int
+  duration      Int?
+  format        String      @default("webm")
+  
+  // Processing Details
+  startedAt     DateTime?
+  completedAt   DateTime?
+  errorMessage  String?
+  retryCount    Int         @default(0)
+  
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  
+  @@map("voice_note_jobs")
+}
+
+// Real-time Connection Tracking
+model UserConnection {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  socketId      String   @unique
+  
+  // Connection Info
+  isOnline      Boolean  @default(true)
+  lastSeen      DateTime @default(now())
+  userAgent     String?
+  ipAddress     String?
+  country       String?
+  
+  // Activity Status
+  currentRoomId String?
+  isTyping      Boolean  @default(false)
+  typingInRoom  String?
+  
+  connectedAt   DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("user_connections")
+}
+
+// Message Delivery Tracking
+model MessageDelivery {
+  id          String   @id @default(cuid())
+  messageId   String
+  userId      String   // Recipient
+  
+  status      DeliveryStatus @default(PENDING)
+  deliveredAt DateTime?
+  readAt      DateTime?
+  
+  // Delivery attempts
+  attempts    Int      @default(0)
+  lastAttempt DateTime @default(now())
+  
+  createdAt   DateTime @default(now())
+  
+  @@unique([messageId, userId])
+  @@map("message_deliveries")
+}
+
+// Conversation Analytics
+model ConversationAnalytics {
+  id              String   @id @default(cuid())
+  roomId          String   @unique
+  
+  // Message Statistics
+  totalMessages   Int      @default(0)
+  textMessages    Int      @default(0)
+  voiceMessages   Int      @default(0)
+  imageMessages   Int      @default(0)
+  
+  // User Activity
+  user1Messages   Int      @default(0)
+  user2Messages   Int      @default(0)
+  
+  // Timing Analytics
+  avgResponseTime Float?   // Average response time in seconds
+  conversationDuration Int? // Total conversation time in minutes
+  
+  // Quality Metrics
+  messageDeletions Int     @default(0)
+  moderatedMessages Int    @default(0)
+  userReports       Int    @default(0)
+  
+  // Engagement
+  totalReactions   Int     @default(0)
+  threadedReplies  Int     @default(0)
+  
+  lastAnalyzedAt   DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@map("conversation_analytics")
+}
+
+// System-wide Communication Metrics
+model CommunicationMetrics {
+  id              String   @id @default(cuid())
+  timestamp       DateTime @default(now())
+  
+  // Connection Metrics
+  activeConnections Int
+  totalRooms       Int
+  activeRooms      Int
+  
+  // Message Metrics
+  messagesPerMinute Float
+  voiceNotesPerHour Int
+  averageMessageLength Float
+  
+  // Performance Metrics
+  avgDeliveryTime  Float   // Average message delivery time in ms
+  messageFailureRate Float // Percentage of failed message deliveries
+  
+  // Feature Usage
+  voiceNoteUsage   Float   // Percentage of messages that are voice notes
+  imageUsage       Float   // Percentage of messages that are images
+  reactionUsage    Float   // Messages with reactions percentage
+  
+  @@map("communication_metrics")
+}
+
+// Enums
+enum RoomType {
+  PRIVATE
+  GROUP
+  PUBLIC
+  TEMPORARY
+}
+
+enum UserRole {
+  MEMBER
+  MODERATOR
+  ADMIN
+}
+
+enum MessageType {
+  TEXT
+  VOICE
+  IMAGE
+  EMOJI
+  SYSTEM
+  FILE
+  LOCATION
+  STICKER
+}
+
+enum ProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum DeliveryStatus {
+  PENDING
+  DELIVERED
+  READ
+  FAILED
+}

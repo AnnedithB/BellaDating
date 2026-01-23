@@ -1,0 +1,91 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Interaction {
+  id          String   @id @default(cuid())
+  roomId      String   @unique
+  user1Id     String
+  user2Id     String
+  
+  // Call status and type
+  status      InteractionStatus @default(INITIATED)
+  callType    CallType         @default(VOICE)
+  
+  // Timing
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+  duration    Int?      // in seconds
+  
+  // Video-specific fields
+  videoRequested    Boolean   @default(false)
+  videoRequestedBy  String?
+  videoRequestedAt  DateTime?
+  videoEnabled      Boolean   @default(false)
+  videoEnabledAt    DateTime?
+  
+  // Quality metrics
+  qualityRating     Int?      // 1-5 scale
+  connectionIssues  Boolean   @default(false)
+  
+  // Metadata
+  userAgent         String?
+  ipAddress         String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  callEvents  CallEvent[]
+
+  @@map("interactions")
+}
+
+model CallEvent {
+  id            String      @id @default(cuid())
+  interactionId String
+  eventType     EventType
+  userId        String?
+  timestamp     DateTime    @default(now())
+  metadata      Json?       // Additional event-specific data
+  
+  interaction   Interaction @relation(fields: [interactionId], references: [id], onDelete: Cascade)
+  
+  @@map("call_events")
+}
+
+enum InteractionStatus {
+  INITIATED
+  CONNECTING
+  CONNECTED
+  DISCONNECTED
+  FAILED
+  COMPLETED
+}
+
+enum CallType {
+  VOICE
+  VIDEO
+}
+
+enum EventType {
+  OFFER_SENT
+  ANSWER_SENT
+  ICE_CANDIDATE
+  VIDEO_REQUESTED
+  VIDEO_ACCEPTED
+  VIDEO_REJECTED
+  VIDEO_ENABLED
+  CONNECTION_ESTABLISHED
+  CONNECTION_LOST
+  CALL_ENDED
+  QUALITY_REPORT
+}

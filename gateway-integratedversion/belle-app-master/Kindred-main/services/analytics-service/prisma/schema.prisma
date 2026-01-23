@@ -1,0 +1,439 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================================
+// DIMENSION TABLES (Reference Data)
+// ========================================
+
+model UserDimension {
+  id                    String   @id @default(cuid())
+  userId                String   @unique @map("user_id")
+  age                   Int?
+  gender                String?
+  locationCountry       String?  @map("location_country")
+  locationCity          String?  @map("location_city")
+  signupDate            DateTime @map("signup_date")
+  signupMethod          String   @map("signup_method")
+  subscriptionStatus    String   @default("free") @map("subscription_status")
+  subscriptionStartDate DateTime? @map("subscription_start_date")
+  subscriptionEndDate   DateTime? @map("subscription_end_date")
+  verificationStatus    String   @default("unverified") @map("verification_status")
+  platformFirstUsed     String   @map("platform_first_used")
+  totalPhotos           Int      @default(0) @map("total_photos")
+  bioCompleted          Boolean  @default(false) @map("bio_completed")
+  interestsCount        Int      @default(0) @map("interests_count")
+  totalMatches          Int      @default(0) @map("total_matches")
+  totalMessagesSent     Int      @default(0) @map("total_messages_sent")
+  totalMessagesReceived Int      @default(0) @map("total_messages_received")
+  totalSessions         Int      @default(0) @map("total_sessions")
+  lastActiveDate        DateTime? @map("last_active_date")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  // Relationships
+  dailyKpis             DailyKPISummary[]
+  retentionCohorts      RetentionCohort[]
+  revenueMetrics        RevenueMetrics[]
+  conversionEvents      ConversionFunnel[]
+
+  @@map("user_dimensions")
+  @@index([signupDate])
+  @@index([subscriptionStatus])
+  @@index([locationCountry])
+  @@index([age])
+  @@index([lastActiveDate])
+}
+
+// ========================================
+// FACT TABLES (Aggregated Metrics)
+// ========================================
+
+model DailyKPISummary {
+  id                          String   @id @default(cuid())
+  date                        DateTime @db.Date
+  totalActiveUsers            Int      @map("total_active_users")
+  newRegistrations            Int      @map("new_registrations")
+  totalSessions               Int      @map("total_sessions")
+  avgSessionDuration          Float    @map("avg_session_duration")
+  totalMatches                Int      @map("total_matches")
+  totalMessages               Int      @map("total_messages")
+  totalRevenue                Float    @map("total_revenue")
+  subscriptionPurchases       Int      @map("subscription_purchases")
+  avgSubscriptionValue        Float    @map("avg_subscription_value")
+  totalReports                Int      @map("total_reports")
+  moderationActions           Int      @map("moderation_actions")
+  userRetentionDay1           Float    @map("user_retention_day1")
+  userRetentionDay7           Float    @map("user_retention_day7")
+  userRetentionDay30          Float    @map("user_retention_day30")
+  conversionToSubscription    Float    @map("conversion_to_subscription")
+  avgTimeToFirstMatch         Float?   @map("avg_time_to_first_match")
+  avgTimeToFirstMessage       Float?   @map("avg_time_to_first_message")
+  totalVideoCallsInitiated    Int      @map("total_video_calls_initiated")
+  totalVideoCallsCompleted    Int      @map("total_video_calls_completed")
+  avgVideoCallDuration        Float    @map("avg_video_call_duration")
+  createdAt                   DateTime @default(now()) @map("created_at")
+  updatedAt                   DateTime @updatedAt @map("updated_at")
+
+  // Breakdown by user segments
+  userDimension               UserDimension? @relation(fields: [userDimensionId], references: [id])
+  userDimensionId             String?        @map("user_dimension_id")
+
+  @@map("daily_kpi_summaries")
+  @@unique([date, userDimensionId])
+  @@index([date])
+  @@index([totalActiveUsers])
+  @@index([newRegistrations])
+  @@index([totalRevenue])
+}
+
+model RetentionCohort {
+  id                    String   @id @default(cuid())
+  cohortWeek            DateTime @map("cohort_week") @db.Date
+  periodNumber          Int      @map("period_number") // 0, 1, 2, 3... weeks after signup
+  cohortSize            Int      @map("cohort_size")
+  usersReturned         Int      @map("users_returned")
+  retentionRate         Float    @map("retention_rate")
+  avgSessionsPerUser    Float    @map("avg_sessions_per_user")
+  avgMatchesPerUser     Float    @map("avg_matches_per_user")
+  avgRevenuePerUser     Float    @map("avg_revenue_per_user")
+  subscriptionConvRate  Float    @map("subscription_conv_rate")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  // Segment breakdown
+  userDimension         UserDimension? @relation(fields: [userDimensionId], references: [id])
+  userDimensionId       String?        @map("user_dimension_id")
+
+  @@map("retention_cohorts")
+  @@unique([cohortWeek, periodNumber, userDimensionId])
+  @@index([cohortWeek])
+  @@index([periodNumber])
+  @@index([retentionRate])
+}
+
+model ConversionFunnel {
+  id                    String   @id @default(cuid())
+  date                  DateTime @db.Date
+  funnelStep            String   @map("funnel_step") // "app_open", "registration_start", "registration_complete", "first_session", "first_match", "first_message", "subscription_view", "subscription_purchase"
+  totalUsers            Int      @map("total_users")
+  convertedUsers        Int      @map("converted_users")
+  conversionRate        Float    @map("conversion_rate")
+  avgTimeToConvert      Float?   @map("avg_time_to_convert") // in hours
+  dropOffReasons        Json?    @map("drop_off_reasons") // JSON array of reasons
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  // Segment breakdown
+  userDimension         UserDimension? @relation(fields: [userDimensionId], references: [id])
+  userDimensionId       String?        @map("user_dimension_id")
+
+  @@map("conversion_funnels")
+  @@unique([date, funnelStep, userDimensionId])
+  @@index([date])
+  @@index([funnelStep])
+  @@index([conversionRate])
+}
+
+model RevenueMetrics {
+  id                    String   @id @default(cuid())
+  date                  DateTime @db.Date
+  subscriptionPlan      String   @map("subscription_plan") // "premium_monthly", "vip_annual", etc.
+  newSubscriptions      Int      @map("new_subscriptions")
+  renewedSubscriptions  Int      @map("renewed_subscriptions")
+  canceledSubscriptions Int      @map("canceled_subscriptions")
+  churnedSubscriptions  Int      @map("churned_subscriptions")
+  totalRevenue          Float    @map("total_revenue")
+  avgRevenuePerUser     Float    @map("avg_revenue_per_user")
+  monthlyRecurringRev   Float    @map("monthly_recurring_revenue")
+  annualRecurringRev    Float    @map("annual_recurring_revenue")
+  customerLifetimeValue Float    @map("customer_lifetime_value")
+  churnRate             Float    @map("churn_rate")
+  netRevenueRetention   Float    @map("net_revenue_retention")
+  grossRevenueRetention Float    @map("gross_revenue_retention")
+  paybackPeriod         Float?   @map("payback_period") // in days
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  // Segment breakdown
+  userDimension         UserDimension? @relation(fields: [userDimensionId], references: [id])
+  userDimensionId       String?        @map("user_dimension_id")
+
+  @@map("revenue_metrics")
+  @@unique([date, subscriptionPlan, userDimensionId])
+  @@index([date])
+  @@index([subscriptionPlan])
+  @@index([totalRevenue])
+  @@index([churnRate])
+}
+
+// ========================================
+// OPERATIONAL TABLES (Detailed Events)
+// ========================================
+
+model UserBehaviorEvent {
+  id                    String   @id @default(cuid())
+  userId                String   @map("user_id")
+  sessionId             String?  @map("session_id")
+  eventName             String   @map("event_name")
+  eventProperties       Json     @map("event_properties")
+  eventTime             DateTime @map("event_time")
+  platform              String   // "ios", "android", "web"
+  appVersion            String   @map("app_version")
+  deviceType            String?  @map("device_type")
+  locationCountry       String?  @map("location_country")
+  locationCity          String?  @map("location_city")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@map("user_behavior_events")
+  @@index([userId])
+  @@index([eventName])
+  @@index([eventTime])
+  @@index([sessionId])
+  @@index([platform])
+}
+
+model SessionAnalytics {
+  id                    String   @id @default(cuid())
+  sessionId             String   @unique @map("session_id")
+  userId                String   @map("user_id")
+  sessionStart          DateTime @map("session_start")
+  sessionEnd            DateTime? @map("session_end")
+  sessionDuration       Int?     @map("session_duration") // in seconds
+  screensViewed         Int      @default(0) @map("screens_viewed")
+  actionsTaken          Int      @default(0) @map("actions_taken")
+  matchesInSession      Int      @default(0) @map("matches_in_session")
+  messagesInSession     Int      @default(0) @map("messages_in_session")
+  platform              String
+  appVersion            String   @map("app_version")
+  deviceType            String?  @map("device_type")
+  connectionType        String?  @map("connection_type")
+  batteryLevel          Int?     @map("battery_level")
+  exitReason            String?  @map("exit_reason") // "user_close", "app_crash", "timeout"
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@map("session_analytics")
+  @@index([userId])
+  @@index([sessionStart])
+  @@index([sessionDuration])
+  @@index([platform])
+}
+
+model MatchAnalytics {
+  id                    String   @id @default(cuid())
+  matchId               String   @unique @map("match_id")
+  user1Id               String   @map("user1_id")
+  user2Id               String   @map("user2_id")
+  sessionId             String   @map("session_id")
+  sessionType           String   @map("session_type") // "video", "text", "anonymous"
+  sessionDuration       Int      @map("session_duration") // in seconds
+  compatibilityScore    Float    @map("compatibility_score")
+  mutualInterestsCount  Int      @map("mutual_interests_count")
+  ageDifference         Int      @map("age_difference")
+  distanceKm            Float?   @map("distance_km")
+  conversationStarted   Boolean  @default(false) @map("conversation_started")
+  firstMessageTime      DateTime? @map("first_message_time")
+  timeToFirstMessage    Int?     @map("time_to_first_message") // in seconds
+  totalMessages         Int      @default(0) @map("total_messages")
+  lastMessageTime       DateTime? @map("last_message_time")
+  conversationLength    Int?     @map("conversation_length") // in seconds
+  relationshipOutcome   String?  @map("relationship_outcome") // "blocked", "unmatched", "ongoing", "relationship"
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@map("match_analytics")
+  @@index([user1Id])
+  @@index([user2Id])
+  @@index([sessionType])
+  @@index([compatibilityScore])
+  @@index([conversationStarted])
+  @@index([createdAt])
+}
+
+model SafetyMetrics {
+  id                    String   @id @default(cuid())
+  date                  DateTime @db.Date
+  totalReports          Int      @map("total_reports")
+  reportsByCategory     Json     @map("reports_by_category") // {"harassment": 25, "fake_profile": 10, ...}
+  automatedActions      Int      @map("automated_actions")
+  manualActions         Int      @map("manual_actions")
+  falsePositives        Int      @map("false_positives")
+  responseTime          Float    @map("response_time") // avg in hours
+  contentRemoved        Int      @map("content_removed")
+  usersBanned           Int      @map("users_banned")
+  usersWarned           Int      @map("users_warned")
+  appealsReceived       Int      @map("appeals_received")
+  appealsUpheld         Int      @map("appeals_upheld")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@map("safety_metrics")
+  @@unique([date])
+  @@index([date])
+  @@index([responseTime])
+}
+
+// ========================================
+// SYSTEM TABLES (Metadata & Configuration)
+// ========================================
+
+model ETLJobRun {
+  id                    String   @id @default(cuid())
+  jobName               String   @map("job_name")
+  startTime             DateTime @map("start_time")
+  endTime               DateTime? @map("end_time")
+  status                String   // "running", "completed", "failed"
+  recordsProcessed      Int      @default(0) @map("records_processed")
+  errorMessage          String?  @map("error_message")
+  executionTimeMs       Int?     @map("execution_time_ms")
+  dataQualityChecks     Json?    @map("data_quality_checks")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@map("etl_job_runs")
+  @@index([jobName])
+  @@index([startTime])
+  @@index([status])
+}
+
+model DataQualityAlert {
+  id                    String   @id @default(cuid())
+  alertType             String   @map("alert_type") // "missing_data", "data_spike", "data_drop", "schema_change"
+  tableName             String   @map("table_name")
+  columnName            String?  @map("column_name")
+  alertMessage          String   @map("alert_message")
+  severity              String   // "low", "medium", "high", "critical"
+  threshold             Float?   // threshold that was breached
+  actualValue           Float?   @map("actual_value")
+  isResolved            Boolean  @default(false) @map("is_resolved")
+  resolvedAt            DateTime? @map("resolved_at")
+  resolvedBy            String?  @map("resolved_by")
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@map("data_quality_alerts")
+  @@index([alertType])
+  @@index([severity])
+  @@index([isResolved])
+  @@index([createdAt])
+}
+
+model HourlyMetrics {
+  id                String   @id @default(cuid())
+  timestamp         DateTime
+  hour              Int      // 0-23
+  
+  // Real-time metrics
+  concurrentUsers   Int      @default(0)
+  activeInteractions Int     @default(0)
+  queueLength       Int      @default(0)
+  
+  // Hourly counts
+  newUsers          Int      @default(0)
+  newInteractions   Int      @default(0)
+  newMessages       Int      @default(0)
+  
+  createdAt         DateTime @default(now())
+  
+  @@unique([timestamp, hour])
+  @@map("hourly_metrics")
+}
+
+model UserSegmentMetrics {
+  id            String     @id @default(cuid())
+  date          DateTime   @db.Date
+  
+  // Segmentation dimensions
+  gender        String?
+  ageGroup      String?    // "18-24", "25-34", etc.
+  location      String?    // Country or region
+  intent        String?    // User's stated intent
+  
+  // Metrics for this segment
+  userCount     Int        @default(0)
+  activeUsers   Int        @default(0)
+  interactions  Int        @default(0)
+  avgDuration   Decimal?   @db.Decimal(10,2)
+  
+  createdAt     DateTime   @default(now())
+  
+  @@unique([date, gender, ageGroup, location, intent])
+  @@map("user_segment_metrics")
+}
+
+model PerformanceMetrics {
+  id              String   @id @default(cuid())
+  timestamp       DateTime @default(now())
+  service         String   // Service name
+  
+  // Response time metrics
+  avgResponseTime Decimal  @db.Decimal(10,2)
+  p95ResponseTime Decimal  @db.Decimal(10,2)
+  p99ResponseTime Decimal  @db.Decimal(10,2)
+  
+  // Throughput metrics
+  requestCount    Int      @default(0)
+  errorCount      Int      @default(0)
+  successRate     Decimal  @db.Decimal(5,4)
+  
+  // Resource metrics
+  cpuUsage        Decimal? @db.Decimal(5,2)
+  memoryUsage     Decimal? @db.Decimal(5,2)
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([service, timestamp])
+  @@map("performance_metrics")
+}
+
+model EventLog {
+  id          String   @id @default(cuid())
+  timestamp   DateTime @default(now())
+  
+  // Event identification
+  eventType   String
+  service     String
+  userId      String?
+  sessionId   String?
+  
+  // Event data
+  data        Json?
+  metadata    Json?
+  
+  // Categorization
+  category    String?  // "user", "interaction", "system", etc.
+  severity    String?  // "info", "warning", "error"
+  
+  @@index([eventType])
+  @@index([service])
+  @@index([userId])
+  @@index([timestamp])
+  @@map("event_logs")
+}
+
+model AlertThreshold {
+  id           String      @id @default(cuid())
+  metricName   String      @unique
+  
+  // Threshold settings
+  warningMin   Decimal?    @db.Decimal(10,2)
+  warningMax   Decimal?    @db.Decimal(10,2)
+  criticalMin  Decimal?    @db.Decimal(10,2)
+  criticalMax  Decimal?    @db.Decimal(10,2)
+  
+  // Alert settings
+  isEnabled    Boolean     @default(true)
+  checkInterval Int        @default(300) // seconds
+  
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  
+  @@map("alert_thresholds")
+}

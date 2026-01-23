@@ -1,0 +1,367 @@
+{
+  "common": {
+    "buttons": {
+      "submit": "Submit",
+      "cancel": "Cancel",
+      "save": "Save",
+      "delete": "Delete",
+      "edit": "Edit",
+      "close": "Close",
+      "back": "Back",
+      "next": "Next",
+      "previous": "Previous",
+      "confirm": "Confirm",
+      "retry": "Retry",
+      "refresh": "Refresh",
+      "loading": "Loading...",
+      "search": "Search",
+      "filter": "Filter",
+      "sort": "Sort",
+      "clear": "Clear",
+      "apply": "Apply"
+    },
+    "status": {
+      "online": "Online",
+      "offline": "Offline",
+      "in_call": "In Call",
+      "queuing": "Looking for Match",
+      "away": "Away",
+      "busy": "Busy"
+    },
+    "errors": {
+      "generic": "An error occurred. Please try again.",
+      "network": "Network error. Please check your connection.",
+      "unauthorized": "You are not authorized to perform this action.",
+      "forbidden": "Access denied.",
+      "not_found": "The requested resource was not found.",
+      "server_error": "Server error. Please try again later.",
+      "validation": "Please check your input and try again.",
+      "required_field": "This field is required",
+      "invalid_email": "Please enter a valid email address",
+      "invalid_username": "Username must be 3-20 characters and contain only letters, numbers, and underscores",
+      "password_too_short": "Password must be at least 8 characters long",
+      "passwords_dont_match": "Passwords do not match"
+    },
+    "success": {
+      "saved": "Changes saved successfully",
+      "deleted": "Deleted successfully",
+      "created": "Created successfully",
+      "updated": "Updated successfully",
+      "sent": "Sent successfully"
+    },
+    "navigation": {
+      "home": "Home",
+      "profile": "Profile",
+      "settings": "Settings",
+      "help": "Help",
+      "about": "About",
+      "contact": "Contact",
+      "privacy": "Privacy",
+      "terms": "Terms of Service",
+      "logout": "Logout",
+      "login": "Login",
+      "signup": "Sign Up"
+    },
+    "time": {
+      "now": "now",
+      "just_now": "just now",
+      "minutes_ago": "{{count}} minute ago",
+      "minutes_ago_plural": "{{count}} minutes ago",
+      "hours_ago": "{{count}} hour ago",
+      "hours_ago_plural": "{{count}} hours ago",
+      "days_ago": "{{count}} day ago",
+      "days_ago_plural": "{{count}} days ago",
+      "weeks_ago": "{{count}} week ago",
+      "weeks_ago_plural": "{{count}} weeks ago",
+      "months_ago": "{{count}} month ago",
+      "months_ago_plural": "{{count}} months ago",
+      "years_ago": "{{count}} year ago",
+      "years_ago_plural": "{{count}} years ago"
+    },
+    "units": {
+      "seconds": "seconds",
+      "minutes": "minutes",
+      "hours": "hours",
+      "days": "days",
+      "weeks": "weeks",
+      "months": "months",
+      "years": "years"
+    }
+  },
+  "auth": {
+    "login": {
+      "title": "Welcome Back",
+      "subtitle": "Sign in to continue your connections",
+      "email_label": "Email Address",
+      "email_placeholder": "Enter your email",
+      "password_label": "Password",
+      "password_placeholder": "Enter your password",
+      "remember_me": "Remember me",
+      "forgot_password": "Forgot password?",
+      "login_button": "Sign In",
+      "signup_link": "Don't have an account? Sign up",
+      "social_login": "Or sign in with",
+      "logging_in": "Signing in..."
+    },
+    "signup": {
+      "title": "Join Real-time Connect",
+      "subtitle": "Create your account to start meeting people",
+      "username_label": "Username",
+      "username_placeholder": "Choose a username",
+      "email_label": "Email Address",
+      "email_placeholder": "Enter your email",
+      "password_label": "Password",
+      "password_placeholder": "Create a password",
+      "confirm_password_label": "Confirm Password",
+      "confirm_password_placeholder": "Confirm your password",
+      "age_label": "Age",
+      "age_placeholder": "Enter your age",
+      "gender_label": "Gender",
+      "terms_agreement": "I agree to the Terms of Service and Privacy Policy",
+      "signup_button": "Create Account",
+      "login_link": "Already have an account? Sign in",
+      "creating_account": "Creating account..."
+    },
+    "verification": {
+      "title": "Verify Your Email",
+      "subtitle": "We sent a verification code to {{email}}",
+      "code_label": "Verification Code",
+      "code_placeholder": "Enter 6-digit code",
+      "verify_button": "Verify Email",
+      "resend_code": "Resend code",
+      "change_email": "Change email address",
+      "verifying": "Verifying...",
+      "code_sent": "Verification code sent",
+      "invalid_code": "Invalid verification code"
+    }
+  },
+  "profile": {
+    "setup": {
+      "title": "Set Up Your Profile",
+      "subtitle": "Tell us about yourself to find better matches",
+      "display_name_label": "Display Name",
+      "display_name_placeholder": "How should others see you?",
+      "bio_label": "Short Bio",
+      "bio_placeholder": "Tell us a bit about yourself (optional)",
+      "intent_label": "What are you looking for?",
+      "intent_friendship": "Friendship",
+      "intent_dating": "Dating",
+      "intent_casual": "Casual Chat",
+      "intent_professional": "Professional Networking",
+      "location_label": "Location",
+      "location_placeholder": "City, Country",
+      "interests_label": "Interests",
+      "interests_placeholder": "Add your interests",
+      "photos_label": "Profile Photos",
+      "photos_subtitle": "Add at least one photo (up to 6)",
+      "videos_label": "Profile Videos",
+      "videos_subtitle": "Add a short video introduction (optional)",
+      "save_profile": "Save Profile",
+      "saving": "Saving profile..."
+    },
+    "edit": {
+      "title": "Edit Profile",
+      "personal_info": "Personal Information",
+      "preferences": "Preferences",
+      "media": "Photos & Videos",
+      "privacy": "Privacy Settings",
+      "danger_zone": "Danger Zone"
+    },
+    "view": {
+      "age": "{{age}} years old",
+      "location": "From {{location}}",
+      "member_since": "Member since {{date}}",
+      "last_seen": "Last seen {{time}}",
+      "interests": "Interests",
+      "photos": "Photos",
+      "videos": "Videos",
+      "report_user": "Report User",
+      "block_user": "Block User",
+      "start_chat": "Start Chat",
+      "video_call": "Video Call"
+    }
+  },
+  "matching": {
+    "queue": {
+      "title": "Looking for Match",
+      "subtitle": "We're finding someone for you to connect with",
+      "searching": "Searching for matches...",
+      "estimated_wait": "Estimated wait: {{time}}",
+      "cancel": "Cancel Search",
+      "preferences": "Search Preferences",
+      "gender_preference": "I want to meet",
+      "gender_male": "Males",
+      "gender_female": "Females",
+      "gender_any": "Anyone",
+      "age_range": "Age Range",
+      "location_preference": "Location",
+      "location_nearby": "Nearby",
+      "location_country": "Same Country",
+      "location_anywhere": "Anywhere",
+      "interests_match": "Similar Interests"
+    },
+    "found": {
+      "title": "Match Found!",
+      "subtitle": "We found someone for you to connect with",
+      "stranger_info": "You're matched with a {{age}} year old {{gender}} from {{location}}",
+      "common_interests": "Common interests: {{interests}}",
+      "start_chat": "Start Chatting",
+      "video_call": "Start Video Call",
+      "next_match": "Find Another Match",
+      "connecting": "Connecting..."
+    }
+  },
+  "chat": {
+    "interface": {
+      "type_message": "Type your message...",
+      "send_message": "Send",
+      "voice_note": "Voice Note",
+      "send_photo": "Send Photo",
+      "send_video": "Send Video",
+      "start_video_call": "Start Video Call",
+      "end_call": "End Call",
+      "mute_microphone": "Mute",
+      "unmute_microphone": "Unmute",
+      "turn_off_camera": "Turn Off Camera",
+      "turn_on_camera": "Turn On Camera",
+      "share_screen": "Share Screen",
+      "stop_sharing": "Stop Sharing",
+      "full_screen": "Full Screen",
+      "exit_full_screen": "Exit Full Screen"
+    },
+    "status": {
+      "connecting": "Connecting...",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "typing": "{{user}} is typing...",
+      "online": "Online",
+      "last_seen": "Last seen {{time}}"
+    },
+    "messages": {
+      "message_deleted": "This message was deleted",
+      "message_edited": "Edited",
+      "voice_note": "Voice Note",
+      "photo": "Photo",
+      "video": "Video",
+      "file": "File",
+      "location": "Location",
+      "contact": "Contact"
+    },
+    "actions": {
+      "copy_message": "Copy",
+      "edit_message": "Edit",
+      "delete_message": "Delete",
+      "reply_message": "Reply",
+      "forward_message": "Forward",
+      "report_message": "Report",
+      "save_photo": "Save Photo",
+      "save_video": "Save Video"
+    }
+  },
+  "settings": {
+    "general": {
+      "title": "General Settings",
+      "language": "Language",
+      "timezone": "Timezone",
+      "date_format": "Date Format",
+      "time_format": "Time Format",
+      "number_format": "Number Format",
+      "currency": "Currency"
+    },
+    "privacy": {
+      "title": "Privacy Settings",
+      "profile_visibility": "Profile Visibility",
+      "show_online_status": "Show Online Status",
+      "show_last_seen": "Show Last Seen",
+      "allow_search": "Allow Search by Username",
+      "show_location": "Show Location",
+      "data_usage": "Data Usage",
+      "download_photos": "Auto-download Photos",
+      "download_videos": "Auto-download Videos"
+    },
+    "notifications": {
+      "title": "Notification Settings",
+      "push_notifications": "Push Notifications",
+      "email_notifications": "Email Notifications",
+      "new_message": "New Messages",
+      "new_match": "New Matches",
+      "video_call": "Video Calls",
+      "friend_request": "Friend Requests",
+      "marketing": "Marketing Emails"
+    },
+    "account": {
+      "title": "Account Settings",
+      "change_password": "Change Password",
+      "two_factor": "Two-Factor Authentication",
+      "export_data": "Export My Data",
+      "delete_account": "Delete Account",
+      "logout_all": "Logout All Devices"
+    }
+  },
+  "safety": {
+    "report": {
+      "title": "Report User",
+      "subtitle": "Help us keep the community safe",
+      "reason_label": "Reason for reporting",
+      "reason_inappropriate": "Inappropriate content",
+      "reason_harassment": "Harassment",
+      "reason_spam": "Spam",
+      "reason_fake": "Fake profile",
+      "reason_underage": "Underage user",
+      "reason_other": "Other",
+      "description_label": "Additional details",
+      "description_placeholder": "Please provide more details about the issue",
+      "submit_report": "Submit Report",
+      "submitting": "Submitting report..."
+    },
+    "block": {
+      "title": "Block User",
+      "subtitle": "This user will no longer be able to contact you",
+      "confirm": "Are you sure you want to block this user?",
+      "block_button": "Block User",
+      "unblock_button": "Unblock User",
+      "blocking": "Blocking user..."
+    },
+    "guidelines": {
+      "title": "Community Guidelines",
+      "respect": "Treat others with respect",
+      "no_harassment": "No harassment or bullying",
+      "no_spam": "No spam or promotional content",
+      "appropriate_content": "Keep content appropriate",
+      "verify_age": "You must be 18 or older",
+      "no_fake_profiles": "Use your real information"
+    }
+  },
+  "admin": {
+    "dashboard": {
+      "title": "Admin Dashboard",
+      "overview": "Overview",
+      "users": "Users",
+      "reports": "Reports",
+      "moderation": "Moderation",
+      "analytics": "Analytics",
+      "settings": "Settings"
+    },
+    "users": {
+      "title": "User Management",
+      "total_users": "Total Users",
+      "active_users": "Active Users",
+      "new_users_today": "New Users Today",
+      "search_users": "Search users...",
+      "user_details": "User Details",
+      "ban_user": "Ban User",
+      "unban_user": "Unban User",
+      "verify_user": "Verify User",
+      "delete_user": "Delete User"
+    },
+    "reports": {
+      "title": "Reports Management",
+      "pending_reports": "Pending Reports",
+      "resolved_reports": "Resolved Reports",
+      "report_details": "Report Details",
+      "take_action": "Take Action",
+      "resolve_report": "Resolve Report",
+      "escalate_report": "Escalate Report"
+    }
+  }
+}

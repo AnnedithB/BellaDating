@@ -1,0 +1,729 @@
+# ============================================================================
+# KINDRED - Unified Docker Compose Orchestration
+# ============================================================================
+# Single source of truth for all 12 microservices + infrastructure
+# 
+# Quick Start:
+#   docker compose up -d                    # Start everything
+#   docker compose up user-service -d       # Start single service + deps
+#   docker compose down                     # Stop everything
+#   docker compose logs -f user-service     # View logs
+#   docker compose ps                       # Check status
+# ============================================================================
+
+services:
+  # ==========================================================================
+  # INFRASTRUCTURE LAYER
+  # ==========================================================================
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: kindred-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: postgres
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - kindred-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  redis:
+    image: redis:7-alpine
+    container_name: kindred-redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    networks:
+      - kindred-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: kindred-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-admin}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-admin123}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    networks:
+      - kindred-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # ==========================================================================
+  # MICROSERVICES LAYER (Ports 3001-3012)
+  # ==========================================================================
+
+  user-service:
+    build:
+      context: .
+      dockerfile: services/user-service/Dockerfile
+      args:
+        SERVICE_NAME: user-service
+    image: kindred/user-service:latest
+    container_name: kindred-user-service
+    ports:
+      - "3001:3001"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3001
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@kindred-postgres:5432/users
+      REDIS_URL: ${REDIS_URL:-redis://kindred-redis:6379}
+      REDIS_HOST: ${REDIS_HOST:-kindred-redis}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000,http://localhost:4000}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION:-us-east-2}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET}
+      VERIFICATION_PROVIDER: ${VERIFICATION_PROVIDER:-aws}
+      AWS_REKOGNITION_MIN_SIMILARITY: ${AWS_REKOGNITION_MIN_SIMILARITY:-80}
+    volumes:
+      - user_service_uploads:/app/services/user-service/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - kindred-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  queuing-service:
+    build:
+      context: .
+      dockerfile: services/queuing-service/Dockerfile
+      args:
+        SERVICE_NAME: queuing-service
+    image: kindred/queuing-service:latest
+    container_name: kindred-queuing-service
+    ports:
+      - "3002:3002"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3002
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@kindred-postgres:5432/queuing
+      REDIS_URL: ${REDIS_URL:-redis://kindred-redis:6379}
+      REDIS_HOST: ${REDIS_HOST:-kindred-redis}
+      JWT_SECRET: ${JWT_SECRET}
+      USER_SERVICE_URL: http://kindred-user-service:3001
+      INTERACTION_SERVICE_URL: http://kindred-interaction-service:3003
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://admin:admin123@kindred-rabbitmq:5672}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    networks:
+      - kindred-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  interaction-service:
+    build:
+      context: .
+      dockerfile: services/interaction-service/Dockerfile
+      args:
+        SERVICE_NAME: interaction-service
+    image: kindred/interaction-service:latest
+    container_name: kindred-interaction-service
+    ports:
+      - "3003:3003"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3003
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@kindred-postgres:5432/interactions
+      REDIS_URL: ${REDIS_URL:-redis://kindred-redis:6379}
+      REDIS_HOST: ${REDIS_HOST:-kindred-redis}
+      JWT_SECRET: ${JWT_SECRET}
+      USER_SERVICE_URL: http://kindred-user-service:3001
+      QUEUING_SERVICE_URL: http://kindred-queuing-service:3002
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://admin:admin123@kindred-rabbitmq:5672}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8081,http://localhost:8080}
+      SOCKET_CORS_ORIGIN: ${SOCKET_CORS_ORIGIN:-http://localhost:3000,http://localhost:8081,http://localhost:8080}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    networks:
+      - kindred-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  history-service:
+    build:
+      context: .
+      dockerfile: services/history-service/Dockerfile
+      args:
+        SERVICE_NAME: history-service
+    image: kindred/history-service:latest
+    container_name: kindred-history-service
+    ports:
+      - "3004:3004"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3004
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@kindred-postgres:5432/history
+      REDIS_URL: ${REDIS_URL:-redis://kindred-redis:6379}
+      REDIS_HOST: ${REDIS_HOST:-kindred-redis}
+      JWT_SECRET: ${JWT_SECRET}
+      USER_SERVICE_URL: http://kindred-user-service:3001
+      INTERACTION_SERVICE_URL: http://kindred-interaction-service:3003
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    networks:
+      - kindred-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  communication-service:
+    build:
+      context: .
+      dockerfile: services/communication-service/Dockerfile
+      args:
+        SERVICE_NAME: communication-service
+    image: kindred/communication-service:latest
+    container_name: kindred-communication-service
+    ports:
+      - "3005:3005"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3005
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@kindred-postgres:5432/communications
+      REDIS_URL: ${REDIS_URL:-redis://kindred-redis:6379}
+      REDIS_HOST: ${REDIS_HOST:-kindred-redis}
+      JWT_SECRET: ${JWT_SECRET}
+      USER_SERVICE_URL: http://kindred-user-service:3001
+      INTERACTION_SERVICE_URL: http://kindred-interaction-service:3003
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://admin:admin123@kindred-rabbitmq:5672}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8081,http://localhost:8080}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    networks:
+      - kindred-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: services/notification-service/Dockerfile
+      args:
+        SERVICE_NAME: notification-service
+    image: kindred/notification-service:latest
+    container_name: kindred-notification-service
+    ports:
+      - "3006:3006"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3006
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@kindred-postgres:5432/notifications
+      REDIS_URL: ${REDIS_URL:-redis://kindred-redis:6379}
+      REDIS_HOST: ${REDIS_HOST:-kindred-redis}
+      JWT_SECRET: ${JWT_SECRET}
+      USER_SERVICE_URL: http://kindred-user-service:3001
+      INTERACTION_SERVICE_URL: http://kindred-interaction-service:3003
+      COMMUNICATION_SERVICE_URL: http://kindred-communication-service:3005
+      RABBITMQ_URL: ${RABBITMQ_URL:-amqp://admin:admin123@kindred-rabbitmq:5672}
+      FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    networks:
+      - kindred-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3006/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  moderation-service:
+    build:
+      context: .
+      dockerfile: services/moderation-service/Dockerfile
+      args:
+        SERVICE_NAME: moderation-service
+    image: kindred/moderation-service:latest
+    container_name: kindred-moderation-service
+    ports:
+      - "3007:3007"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3007
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@kindred-postgres:5432/moderation
+      REDIS_URL: ${REDIS_URL:-redis://kindred-redis:6379}
+      REDIS_HOST: ${REDIS_HOST:-kindred-redis}
+      JWT_SECRET: ${JWT_SECRET}
+      USER_SERVICE_URL: http://kindred-user-service:3001
+      INTERACTION_SERVICE_URL: http://kindred-interaction-service:3003
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    networks:
+      - kindred-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3007/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  analytics-service:
+    build:
+      context: .
+      dockerfile: services/analytics-service/Dockerfile
+      args:
+        SERVICE_NAME: analytics-service
+    image: kindred/analytics-service:latest
+    container_name: kindred-analytics-service
+    ports:
+      - "3008:3008"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3008
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@kindred-postgres:5432/analytics
+      ANALYTICS_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@kindred-postgres:5432/analytics
+      USER_SERVICE_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@kindred-postgres:5432/users
+      INTERACTION_SERVICE_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@kindred-postgres:5432/interactions
+      COMMUNICATION_SERVICE_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@kindred-postgres:5432/communications
+      REDIS_URL: ${REDIS_URL:-redis://kindred-redis:6379}
+      REDIS_HOST: ${REDIS_HOST:-kindred-redis}
+      MIXPANEL_PROJECT_TOKEN: ${MIXPANEL_PROJECT_TOKEN}
+      MIXPANEL_API_SECRET: ${MIXPANEL_API_SECRET}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5005}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5005}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - kindred-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3008/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  admin-service:
+    build:
+      context: .
+      dockerfile: services/admin-service/Dockerfile
+      args:
+        SERVICE_NAME: admin-service
+    image: kindred/admin-service:latest
+    container_name: kindred-admin-service
+    ports:
+      - "3009:3009"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3009
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@kindred-postgres:5432/admin
+      REDIS_URL: ${REDIS_URL:-redis://kindred-redis:6379}
+      REDIS_HOST: ${REDIS_HOST:-kindred-redis}
+      JWT_SECRET: ${JWT_SECRET}
+      USER_SERVICE_URL: http://kindred-user-service:3001
+      MODERATION_SERVICE_URL: http://kindred-moderation-service:3007
+      ANALYTICS_SERVICE_URL: http://kindred-analytics-service:3008
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5005}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:5005}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    networks:
+      - kindred-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3009/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  subscription-service:
+    build:
+      context: .
+      dockerfile: services/subscription-service/Dockerfile
+      args:
+        SERVICE_NAME: subscription-service
+    image: kindred/subscription-service:latest
+    container_name: kindred-subscription-service
+    ports:
+      - "3010:3010"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 3010
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@kindred-postgres:5432/subscriptions
+      REDIS_URL: ${REDIS_URL:-redis://kindred-redis:6379}
+      REDIS_HOST: ${REDIS_HOST:-kindred-redis}
+      JWT_SECRET: ${JWT_SECRET}
+      USER_SERVICE_URL: http://kindred-user-service:3001
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      STRIPE_PUBLISHABLE_KEY: ${STRIPE_PUBLISHABLE_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    networks:
+      - kindred-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3010/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # ==========================================================================
+  # API GATEWAY LAYER (Port 4000)
+  # ==========================================================================
+
+  graphql-gateway:
+    build:
+      context: .
+      dockerfile: services/graphql-gateway/Dockerfile
+      args:
+        SERVICE_NAME: graphql-gateway
+    container_name: kindred-graphql-gateway
+    ports:
+      - "4000:4000"
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: 4000
+      JWT_SECRET: ${JWT_SECRET}
+      REDIS_URL: ${REDIS_URL:-redis://kindred-redis:6379}
+      REDIS_HOST: ${REDIS_HOST:-kindred-redis}
+      USER_SERVICE_URL: http://kindred-user-service:3001
+      QUEUING_SERVICE_URL: http://kindred-queuing-service:3002
+      INTERACTION_SERVICE_URL: http://kindred-interaction-service:3003
+      HISTORY_SERVICE_URL: http://kindred-history-service:3004
+      COMMUNICATION_SERVICE_URL: http://kindred-communication-service:3005
+      NOTIFICATION_SERVICE_URL: http://kindred-notification-service:3006
+      MODERATION_SERVICE_URL: http://kindred-moderation-service:3007
+      ANALYTICS_SERVICE_URL: http://kindred-analytics-service:3008
+      ADMIN_SERVICE_URL: http://kindred-admin-service:3009
+      SUBSCRIPTION_SERVICE_URL: http://kindred-subscription-service:3010
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000,http://localhost:8081,http://localhost:8080}
+    depends_on:
+      redis:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+      queuing-service:
+        condition: service_healthy
+      interaction-service:
+        condition: service_healthy
+      history-service:
+        condition: service_healthy
+      communication-service:
+        condition: service_healthy
+    networks:
+      - kindred-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4000/.well-known/apollo/server-health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+
+  # ==========================================================================
+  # DEV-PROXY - Unified Development Gateway
+  # ==========================================================================
+  dev-proxy:
+    build:
+      context: .
+      dockerfile: services/dev-proxy/Dockerfile
+    image: kindred/dev-proxy:latest
+    container_name: kindred-dev-proxy
+    ports:
+      - "4100:4100"
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: 4100
+      HOST: 0.0.0.0
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      # Service URLs (using Docker container names)
+      SERVICE_USER_URL: http://kindred-user-service:3001
+      SERVICE_QUEUE_URL: http://kindred-queuing-service:3002
+      SERVICE_INTERACTION_URL: http://kindred-interaction-service:3003
+      SERVICE_HISTORY_URL: http://kindred-history-service:3004
+      SERVICE_COMMUNICATION_URL: http://kindred-communication-service:3005
+      SERVICE_NOTIFICATION_URL: http://kindred-notification-service:3006
+      SERVICE_MODERATION_URL: http://kindred-moderation-service:3007
+      SERVICE_ANALYTICS_URL: http://kindred-analytics-service:3008
+      SERVICE_ADMIN_URL: http://kindred-admin-service:3009
+      SERVICE_SUBSCRIPTION_URL: http://kindred-subscription-service:3010
+      SERVICE_GRAPHQL_URL: http://kindred-graphql-gateway:4000
+    depends_on:
+      user-service:
+        condition: service_healthy
+      queuing-service:
+        condition: service_healthy
+      interaction-service:
+        condition: service_healthy
+      history-service:
+        condition: service_healthy
+      communication-service:
+        condition: service_healthy
+      notification-service:
+        condition: service_healthy
+      moderation-service:
+        condition: service_healthy
+      subscription-service:
+        condition: service_healthy
+      graphql-gateway:
+        condition: service_healthy
+    networks:
+      - kindred-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4100/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+# ============================================================================
+# VOLUMES
+# ============================================================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+  user_service_uploads:
+    driver: local
+
+# ============================================================================
+# NETWORKS
+# ============================================================================
+networks:
+    kindred-network:
+      driver: bridge
+      name: kindred-network
+      external: true

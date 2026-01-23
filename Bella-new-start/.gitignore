@@ -1,0 +1,48 @@
+# Cleanup artifacts
+kindred-backup-*/
+CLEANUP_*.md
+EXECUTIVE_SUMMARY.md
+BEFORE_AFTER_COMPARISON.md
+POST_CLEANUP_VERIFICATION.md
+START_HERE.md
+purge-legacy.sh
+purge-legacy.bat
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Docker
+.dockerignore
+
+# Testing
+coverage/
+.nyc_output/
+
+# Misc
+*.bak
+*.tmp
