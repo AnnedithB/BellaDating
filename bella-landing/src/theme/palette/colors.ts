@@ -94,4 +94,7 @@ export const lightBlue = {
 export const basic = {
   white: '#ffffff',
   black: '#000000',
+  okBlue: '#D2E7FF',
+  okBlack: '#111111',
+  okIndigo: '#3341FF',
 };

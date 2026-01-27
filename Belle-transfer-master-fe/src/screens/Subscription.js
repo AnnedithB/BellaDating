@@ -376,125 +376,56 @@ export default function Subscription({ navigation }) {
       return;
     }
 
-    // Determine billing cycle from plan
-    const billingCycle = plan.duration?.includes('Month') && !plan.duration?.includes('6') 
-      ? 'MONTHLY' 
-      : 'YEARLY';
-
     setPurchasing(true);
     try {
       const token = await tokenStorage.getToken();
       if (!token) {
         Alert.alert('Authentication Required', 'Please log in to continue.');
+        setPurchasing(false);
         return;
       }
 
       // Get billing cycle from plan duration
       const billingCycle = plan.duration?.includes('6') || plan.duration?.includes('Year') 
-        ? 'YEARLY' 
+        ? 'SIXMONTH' 
         : 'MONTHLY';
 
-      // Use appleProductId (which is plan.id from Apple IAP) or plan.id
-      const appleProductId = plan.productId || plan.id;
-
-      // Create checkout session
-      const response = await fetch(`${config.SUBSCRIPTION_SERVICE_URL}/api/subscriptions/create-checkout-session`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          appleProductId: appleProductId, // Send Apple product ID
-          billingCycle: billingCycle,
-          successUrl: Platform.OS === 'web' 
-            ? `${window.location.origin}/subscription-success?session_id={CHECKOUT_SESSION_ID}`
-            : `${config.API_URL.replace(':4000', ':3010')}/api/subscriptions/checkout-success?session_id={CHECKOUT_SESSION_ID}`,
-          cancelUrl: Platform.OS === 'web'
-            ? `${window.location.origin}/subscription-cancel`
-            : `${config.API_URL.replace(':4000', ':3010')}/api/subscriptions/checkout-cancel`,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Failed to create checkout session' }));
-        throw new Error(errorData.message || `Server error: ${response.status}`);
+      // Build URL to bella-landing billing page with token and optional plan info
+      const billingUrl = new URL('https://bella-billing.vercel.app/billing');
+      billingUrl.searchParams.set('token', token);
+      
+      // Optionally pass plan info to help with selection
+      if (plan.productId) {
+        billingUrl.searchParams.set('planId', plan.productId);
       }
+      billingUrl.searchParams.set('billingCycle', billingCycle);
 
-      const data = await response.json();
-      console.log('[Subscription] Checkout session response:', data);
+      console.log('[Subscription] Redirecting to bella-landing billing:', billingUrl.toString());
 
-      if (data.status === 'success' && data.data?.url) {
-        const checkoutUrl = data.data.url;
-        const sessionId = data.data?.sessionId;
-        console.log('[Subscription] Opening Stripe checkout:', checkoutUrl);
-        console.log('[Subscription] Session ID from backend:', sessionId);
-        
-        // Store session_id in localStorage for later retrieval
-        if (sessionId) {
-          try {
-            localStorage.setItem('stripe_checkout_session_id', sessionId);
-            // Clear any previous verification status so new payment can be verified
-            localStorage.removeItem('subscription_verification_complete');
-            console.log('[Subscription] ✅ Stored session_id in localStorage:', sessionId);
-            console.log('[Subscription] ✅ Cleared previous verification status');
-          } catch (e) {
-            console.warn('[Subscription] Failed to store session_id in localStorage:', e);
-          }
-        }
-        
-        // Validate URL
-        if (!checkoutUrl.startsWith('https://checkout.stripe.com')) {
-          throw new Error('Invalid checkout URL received from server');
-        }
-
-        // Open Stripe checkout in browser
-        if (Platform.OS === 'web') {
-          // For web, redirect in same window so we can detect the return
-          window.location.href = checkoutUrl;
-          // Note: We'll detect the return via URL parameter in useEffect
-          return;
-        } else {
-          // For mobile (iOS/Android), use WebBrowser as modal/popup
-          const browserOptions = {
-            showTitle: true,
-            enableBarCollapsing: false,
-            controlsColor: '#000000',
-          };
-          
-          // Add iOS-specific modal presentation
-          if (Platform.OS === 'ios') {
-            browserOptions.presentationStyle = WebBrowser.WebBrowserPresentationStyle.FORM_SHEET;
-          }
-          
-          const result = await WebBrowser.openBrowserAsync(checkoutUrl, browserOptions);
-
-          // Check if payment was successful (user closed browser)
-          if (result.type === 'dismiss' || result.type === 'cancel') {
-            // Poll for subscription status after browser closes
-            await pollSubscriptionStatus();
-          }
-        }
+      // Open bella-landing billing page in browser
+      if (Platform.OS === 'web') {
+        // For web, redirect in same window
+        window.location.href = billingUrl.toString();
       } else {
-        throw new Error(data.message || 'Failed to create checkout session');
+        // For mobile (iOS/Android), use WebBrowser
+        const browserOptions = {
+          showTitle: true,
+          enableBarCollapsing: false,
+          controlsColor: '#000000',
+        };
+        
+        // Add iOS-specific modal presentation
+        if (Platform.OS === 'ios') {
+          browserOptions.presentationStyle = WebBrowser.WebBrowserPresentationStyle.FORM_SHEET;
+        }
+        
+        await WebBrowser.openBrowserAsync(billingUrl.toString(), browserOptions);
       }
     } catch (error) {
-      console.error('[Subscription] Web payment error:', error);
-      const errorMessage = error.message || 'An error occurred. Please try again.';
-      
-      // Provide more helpful error messages
-      let userMessage = errorMessage;
-      if (errorMessage.includes('500') || errorMessage.includes('Internal server error')) {
-        userMessage = 'Server error. Please check that the subscription service is running and database is configured.';
-      } else if (errorMessage.includes('404')) {
-        userMessage = 'Subscription plan not found. Please contact support.';
-      } else if (errorMessage.includes('409')) {
-        userMessage = 'You already have an active subscription.';
-      }
-      
+      console.error('[Subscription] Web payment redirect error:', error);
       Alert.alert(
-        'Payment Failed',
-        userMessage,
+        'Redirect Failed',
+        'Failed to open billing page. Please try again.',
         [{ text: 'OK' }]
       );
     } finally {

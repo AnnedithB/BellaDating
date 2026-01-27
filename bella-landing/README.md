@@ -1,10 +1,11 @@
-# Bella Billing Frontend
+# Bella Landing Page
 
-A modern billing and subscription management frontend built with React, TypeScript, and Material-UI.
+A modern landing page and billing management frontend built with React, TypeScript, and Material-UI.
 
 ## Features
 
-- **Subscription Management**: View and manage your current subscription
+- **Landing Page**: Beautiful landing page with call-to-action
+- **Subscription Management**: View and manage your current subscription (at `/billing`)
 - **Plan Selection**: Browse and compare available subscription plans
 - **Invoice History**: View and download past invoices
 - **Payment Methods**: Manage payment methods and billing details
@@ -29,6 +30,7 @@ A modern billing and subscription management frontend built with React, TypeScri
 ### Installation
 
 1. Install dependencies:
+
 ```bash
 npm install
 # or
@@ -38,6 +40,7 @@ pnpm install
 ```
 
 2. Start the development server:
+
 ```bash
 npm run dev
 # or
@@ -73,11 +76,13 @@ pnpm preview
 ## Project Structure
 
 ```
-bella-billing/
+bella-landing/
 ├── src/
 │   ├── components/       # Reusable components
 │   ├── lib/             # Utility functions
 │   ├── pages/           # Page components
+│   │   ├── Landing.tsx  # Landing page
+│   │   └── Billing.tsx  # Billing page
 │   ├── routes/          # Routing configuration
 │   ├── theme/           # Theme configuration
 │   │   ├── palette/     # Color palette
@@ -133,20 +138,26 @@ The page connects to your subscription service at the URL specified in `VITE_SUB
 When redirecting users from your mobile app, you can pass the auth token in the URL:
 
 ```
-https://your-billing-page.com/?token=USER_AUTH_TOKEN
+https://your-landing-page.com/billing?token=USER_AUTH_TOKEN
 ```
 
-The page will automatically extract and store the token.
+The billing page will automatically extract and store the token.
 
 ## Customization
 
 ### Theme
 
 The theme can be customized in `src/theme/`:
+
 - `palette/colors.ts` - Color definitions
 - `palette/index.ts` - Palette configuration
 - `theme.ts` - Main theme object
 - `typography.ts` - Typography settings
+
+### Routes
+
+- `/` - Landing page
+- `/billing` - Billing and subscription management page
 
 ### Adding New Pages
 

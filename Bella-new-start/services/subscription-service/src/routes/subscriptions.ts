@@ -273,16 +273,31 @@ router.post('/create-checkout-session',
         where: { id: planId, isActive: true }
       });
     } else if (appleProductId) {
-      // Find plan by Apple product ID
+      // Find plan by Apple product ID - prefer Apple Pay plans (not _web) for mobile app
+      // First try to find Apple Pay plans (plans without '_web' in name)
       plan = await prisma.subscriptionPlan.findFirst({
         where: {
           isActive: true,
+          name: { not: { contains: '_web' } }, // Exclude web plans
           OR: [
             { appleProductIdMonthly: appleProductId },
             { appleProductIdYearly: appleProductId }
           ]
         }
       });
+      
+      // If no Apple Pay plan found, fallback to any matching plan
+      if (!plan) {
+        plan = await prisma.subscriptionPlan.findFirst({
+          where: {
+            isActive: true,
+            OR: [
+              { appleProductIdMonthly: appleProductId },
+              { appleProductIdYearly: appleProductId }
+            ]
+          }
+        });
+      }
       
       // Determine billing cycle from which field matched
       if (plan && plan.appleProductIdMonthly === appleProductId) {
@@ -297,46 +312,49 @@ router.post('/create-checkout-session',
       throw createError('Subscription plan not found or inactive', 404);
     }
 
-    // Web pricing: $19.99/month, $99.99/6 months (different from Apple prices)
-    // Apple pricing: $29.99/month, $139.99/6 months (stored in plan)
-    const webMonthlyPrice = 19.99;
-    const webSixMonthPrice = 99.99;
-    
-    // Use web pricing for Stripe checkout
-    let webPrice: number;
+    // Use the plan's actual pricing (web or Apple Pay based on plan name)
+    // Web plans: premium_monthly_web ($19.99), premium_6months_web ($99.99)
+    // Apple Pay plans: premium_monthly_apple ($29.99), premium_6months_apple ($139.99)
+    let planPrice: number;
+    let stripePriceId: string | null = null;
     let priceInterval: string;
-    if (billingCycle === 'SIXMONTH') {
-      webPrice = webSixMonthPrice;
-      priceInterval = 'month'; // Stripe will handle 6-month interval via recurring count
-    } else if (billingCycle === 'YEARLY') {
-      webPrice = webSixMonthPrice; // Keep same price for backwards compatibility
-      priceInterval = 'year';
-    } else {
-      webPrice = webMonthlyPrice;
+    
+    if (billingCycle === 'SIXMONTH' || billingCycle === 'YEARLY') {
+      planPrice = Number(plan.yearlyPrice); // Use yearlyPrice for 6-month plans
       priceInterval = 'month';
+      // Use existing Stripe price if available, otherwise create new one
+      stripePriceId = plan.stripePriceIdYearly || null;
+    } else {
+      planPrice = Number(plan.monthlyPrice); // Use monthlyPrice for monthly plans
+      priceInterval = 'month';
+      // Use existing Stripe price if available, otherwise create new one
+      stripePriceId = plan.stripePriceIdMonthly || null;
     }
     
-    // Create Stripe price dynamically with web pricing
-    let stripePriceId: string;
-    try {
-      const recurringConfig: any = { interval: priceInterval };
-      if (billingCycle === 'SIXMONTH') {
-        recurringConfig.interval_count = 6; // 6 months
+    // Create Stripe price if not already exists
+    if (!stripePriceId) {
+      try {
+        const recurringConfig: any = { interval: priceInterval };
+        if (billingCycle === 'SIXMONTH') {
+          recurringConfig.interval_count = 6; // 6 months
+        }
+        
+        const stripePrice = await stripe.prices.create({
+          unit_amount: Math.round(planPrice * 100), // Convert to cents
+          currency: 'usd',
+          recurring: recurringConfig,
+          product_data: {
+            name: `${plan.displayName} - ${billingCycle === 'SIXMONTH' ? '6 Months' : billingCycle === 'YEARLY' ? 'Yearly' : 'Monthly'}`,
+          },
+        });
+        stripePriceId = stripePrice.id;
+        logger.info(`Created Stripe price for checkout: ${stripePriceId} ($${planPrice}/${priceInterval})`);
+      } catch (stripeError) {
+        logger.error('Error creating Stripe price:', stripeError);
+        throw createError('Failed to create payment price', 500);
       }
-      
-      const stripePrice = await stripe.prices.create({
-        unit_amount: Math.round(webPrice * 100), // Convert to cents
-        currency: 'usd',
-        recurring: recurringConfig,
-        product_data: {
-          name: `${plan.displayName} - ${billingCycle === 'SIXMONTH' ? '6 Months' : billingCycle === 'YEARLY' ? 'Yearly' : 'Monthly'} (Web)`,
-        },
-      });
-      stripePriceId = stripePrice.id;
-      logger.info(`Created Stripe price for web checkout: ${stripePriceId} ($${webPrice}/${priceInterval})`);
-    } catch (stripeError) {
-      logger.error('Error creating Stripe price:', stripeError);
-      throw createError('Failed to create payment price', 500);
+    } else {
+      logger.info(`Using existing Stripe price: ${stripePriceId} ($${planPrice}/${priceInterval})`);
     }
 
     // Create or get Stripe customer
@@ -739,15 +757,30 @@ router.get('/checkout-success',
           }
           
           if (!plan && appleProductId) {
+            // Prefer Apple Pay plans (not _web) for mobile app subscriptions
             plan = await prisma.subscriptionPlan.findFirst({
               where: {
                 isActive: true,
+                name: { not: { contains: '_web' } }, // Exclude web plans
                 OR: [
                   { appleProductIdMonthly: appleProductId },
                   { appleProductIdYearly: appleProductId }
                 ]
               }
             });
+            
+            // If no Apple Pay plan found, fallback to any matching plan
+            if (!plan) {
+              plan = await prisma.subscriptionPlan.findFirst({
+                where: {
+                  isActive: true,
+                  OR: [
+                    { appleProductIdMonthly: appleProductId },
+                    { appleProductIdYearly: appleProductId }
+                  ]
+                }
+              });
+            }
             if (plan) planId = plan.id;
           }
 
@@ -782,8 +815,10 @@ router.get('/checkout-success',
             });
           }
 
-          // Create subscription
-          const price = billingCycle === 'SIXMONTH' ? 99.99 : billingCycle === 'YEARLY' ? 99.99 : 19.99;
+          // Create subscription - use plan's actual pricing
+          const price = billingCycle === 'SIXMONTH' || billingCycle === 'YEARLY' 
+            ? Number(plan.yearlyPrice) 
+            : Number(plan.monthlyPrice);
           subscription = await prisma.userSubscription.create({
             data: {
               userId,

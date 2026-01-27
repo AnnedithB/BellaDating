@@ -6,13 +6,7 @@
   "tabWidth": 2,
   "useTabs": false,
   "plugins": ["@trivago/prettier-plugin-sort-imports"],
-  "importOrder": [
-    "^react",
-    "^@mui",
-    "^@iconify",
-    "^dayjs",
-    "^[./]"
-  ],
+  "importOrder": ["^react", "^@mui", "^@iconify", "^dayjs", "^[./]"],
   "importOrderSeparation": true,
   "importOrderSortSpecifiers": true
 }

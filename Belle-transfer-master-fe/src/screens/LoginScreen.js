@@ -400,7 +400,7 @@ export default function AuthScreen({ navigation }) {
         </View>
 
         <Text style={styles.title}>
-          {isLoginView ? "Kyn-Dating & Meeting" : "Create Account"}
+          {isLoginView ? "Belle" : "Create Account"}
         </Text>
         <Text style={styles.subtitle}>
           {isLoginView

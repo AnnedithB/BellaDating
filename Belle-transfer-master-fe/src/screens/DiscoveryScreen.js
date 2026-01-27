@@ -1516,7 +1516,7 @@ export default function DiscoveryScreen({ navigation, route }) {
         onIgnore={handleCallIgnore}
         onDismiss={handleCallIgnore}
       />
-      <ScreenHeader title="KYN" rightButton={filterButton} />
+      <ScreenHeader title="Belle" rightButton={filterButton} />
 
       <ScrollView style={styles.content}>
         <Text style={styles.headline}>Discover new connections!</Text>

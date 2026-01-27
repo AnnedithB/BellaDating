@@ -1,4 +1,4 @@
-import { API_ENDPOINTS, getAuthToken } from 'config/api';
+import { API_BASE_URL, API_ENDPOINTS, getAuthToken } from 'config/api';
 import { Invoice, PaymentMethod, SubscriptionPlan, UserSubscription } from 'types/billing';
 
 export interface ApiResponse<T> {
@@ -50,12 +50,21 @@ async function apiRequest<T>(url: string, options: RequestInit = {}): Promise<Ap
 export const plansApi = {
   getAll: async (): Promise<SubscriptionPlan[]> => {
     // Plans endpoint is public, so we can call it without auth
-    const response = await fetch(API_ENDPOINTS.PLANS);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch plans: ${response.status}`);
+    try {
+      const response = await fetch(API_ENDPOINTS.PLANS);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch plans: ${response.status}`);
+      }
+      const data = await response.json();
+      return data.data || [];
+    } catch (error) {
+      if (error instanceof TypeError && error.message === 'Failed to fetch') {
+        throw new Error(
+          `Cannot connect to backend server at ${API_BASE_URL}. Please check that the subscription service is running.`
+        );
+      }
+      throw error;
     }
-    const data = await response.json();
-    return data.data || [];
   },
 
   getById: async (id: string): Promise<SubscriptionPlan> => {

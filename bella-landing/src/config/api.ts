@@ -1,6 +1,26 @@
 // API Configuration
-export const API_BASE_URL =
-  import.meta.env.VITE_SUBSCRIPTION_SERVICE_URL || 'http://localhost:3006';
+// Use relative URLs in production on Vercel to avoid mixed content errors
+// Vercel will proxy these via vercel.json
+function getApiBaseUrl(): string {
+  // Check if we're in production on Vercel (not localhost)
+  const isVercelProduction =
+    import.meta.env.PROD &&
+    typeof window !== 'undefined' &&
+    window.location.hostname !== 'localhost' &&
+    !window.location.hostname.includes('127.0.0.1') &&
+    (window.location.hostname.includes('vercel.app') ||
+      window.location.hostname.includes('vercel.com'));
+
+  // Use relative URLs in production on Vercel to avoid mixed content
+  if (isVercelProduction) {
+    return '';
+  }
+
+  // Use environment variable or default for development
+  return import.meta.env.VITE_SUBSCRIPTION_SERVICE_URL || 'http://localhost:3006';
+}
+
+export const API_BASE_URL = getApiBaseUrl();
 
 export const API_ENDPOINTS = {
   // Subscription Plans

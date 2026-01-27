@@ -7,6 +7,8 @@ import { RouterProvider } from 'react-router';
 
 import { CssBaseline, ThemeProvider } from '@mui/material';
 
+import './index.css';
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider theme={theme}>

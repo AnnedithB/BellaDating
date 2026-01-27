@@ -389,7 +389,7 @@ export default function DiscoveryScreen({ navigation, route }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScreenHeader title="KYN" rightButton={filterButton}  />
+      <ScreenHeader title="Belle" rightButton={filterButton}  />
 
       <ScrollView style={styles.content}>
         <Text style={styles.headline}>Discover new connections!</Text>
