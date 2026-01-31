@@ -190,13 +190,23 @@ export default function CallView({
     }
   }, [heartStatus]);
 
-  // Animate video icon flicker when video request is received
+  // Animate video icon with smooth gentle scale when video request is received
   useEffect(() => {
     if (videoRequestReceived) {
       Animated.loop(
         Animated.sequence([
-          Animated.timing(videoAnim, { toValue: 0.3, duration: 200, useNativeDriver: true }),
-          Animated.timing(videoAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
+          Animated.timing(videoAnim, { 
+            toValue: 1.15, 
+            duration: 800, 
+            useNativeDriver: true, 
+            easing: Easing.out(Easing.ease) 
+          }),
+          Animated.timing(videoAnim, { 
+            toValue: 1, 
+            duration: 800, 
+            useNativeDriver: true, 
+            easing: Easing.in(Easing.ease) 
+          }),
         ]),
       ).start();
     } else {
@@ -698,10 +708,10 @@ export default function CallView({
   };
 
   const heartColor = heartStatus === 'matched'
-    ? '#4CAF50'
+    ? '#FFD700'
     : heartStatus === 'requested' || heartStatus === 'incoming'
       ? '#ff3b30'
-      : '#FFD700';
+      : '#000000';
 
   const isEndingCall = useRef(false);
   
@@ -867,14 +877,14 @@ export default function CallView({
             }}
             activeOpacity={0.7}
           >
-            <Animated.View style={{ opacity: videoAnim }}>
+            <Animated.View style={{ transform: [{ scale: videoAnim }] }}>
               <Ionicons
-                name="videocam"
+                name={isVideoEnabled || videoRequestPending || videoRequestReceived ? 'videocam' : 'videocam-outline'}
                 size={20}
                 color={
                   isVideoEnabled || videoRequestPending || videoRequestReceived
                     ? '#4CAF50'
-                    : '#999999'
+                    : '#000000'
                 }
               />
             </Animated.View>
@@ -884,7 +894,11 @@ export default function CallView({
           </TouchableOpacity>
           <TouchableOpacity style={styles.topIconButton} onPress={handleHeartPress}>
             <Animated.View style={{ transform: [{ scale: heartAnim }] }}>
-              <Ionicons name="heart" size={20} color={heartColor} />
+              <Ionicons 
+                name={heartStatus === 'matched' ? 'heart' : 'heart-outline'} 
+                size={20} 
+                color={heartColor} 
+              />
             </Animated.View>
             {heartStatus === 'incoming' && (
               <View style={styles.heartSparkle}>

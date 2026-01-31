@@ -5,6 +5,7 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { SocketProvider } from '../context/SocketContext';
+import pushNotifications from '../services/pushNotifications';
 
 import LoginScreen from '../screens/LoginScreen';
 import ForgotPasswordScreen from '../screens/ForgotPasswordScreen';
@@ -69,6 +70,22 @@ function RootNavigator({ navigationRef }) {
       }, 100);
     }
   }, [isAuthenticated, auth.justRegistered, navigationRef, auth]);
+
+  // Register device token when user becomes authenticated
+  useEffect(() => {
+    let mounted = true;
+    const register = async () => {
+      try {
+        if (isAuthenticated && auth.user && auth.user.id) {
+          await pushNotifications.registerForPushNotificationsAsync(auth.user.id);
+        }
+      } catch (e) {
+        console.warn('[AppNavigator] push registration failed:', e);
+      }
+    };
+    if (mounted) register();
+    return () => { mounted = false; };
+  }, [isAuthenticated, auth.user]);
 
   // While auth state is being checked, show loading
   if (isLoading) {

@@ -372,6 +372,13 @@ services:
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID}
       FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL}
       FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY}
+      APNS_KEY_ID: ${APNS_KEY_ID}
+      APNS_TEAM_ID: ${APNS_TEAM_ID}
+      APNS_PRIVATE_KEY_PATH: ${APNS_PRIVATE_KEY_PATH:-/opt/keys/apns_key.p8}
+      APNS_BUNDLE_ID: ${APNS_BUNDLE_ID}
+      APNS_PRODUCTION: ${APNS_PRODUCTION:-false}
+    volumes:
+      - /opt/keys/apns_key.p8:/opt/keys/apns_key.p8:ro
     depends_on:
       postgres:
         condition: service_healthy

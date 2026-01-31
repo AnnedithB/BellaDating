@@ -60,6 +60,10 @@ model UserRoom {
   // Notifications
   notificationsEnabled Boolean @default(true)
   
+  // Missed Call Tracking
+  missedCallCount    Int      @default(0)
+  lastMissedCallAt   DateTime?
+  
   joinedAt      DateTime @default(now())
   
   // Relations

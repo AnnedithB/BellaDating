@@ -144,10 +144,7 @@ sudo docker compose -f /home/kindred/projects/master-be/docker-compose.yml build
 sudo docker compose -f /home/kindred/projects/master-be/docker-compose.yml up -d subscription-service
 
 # 12. GraphQL Gateway (needs other services)
-sudo docker compose -f /home/kindred/projects/master-be/docker-compose.yml build queuing-service
-sudo docker compose -f /home/kindred/projects/master-be/docker-compose.yml up -d queuing-service
-sudo docker compose -f /home/kindred/projects/master-be/docker-compose.yml build communication-service
-sudo docker compose -f /home/kindred/projects/master-be/docker-compose.yml up -d communication-service
+
   sudo docker compose -f /home/kindred/projects/master-be/docker-compose.yml build graphql-gateway
   sudo docker compose -f /home/kindred/projects/master-be/docker-compose.yml up -d graphql-gateway
 

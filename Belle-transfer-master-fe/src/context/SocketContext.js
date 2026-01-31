@@ -301,7 +301,14 @@ export const SocketProvider = ({ children }) => {
             if (currentStatus === 'receiving_call') {
               console.log('[SocketContext] Call not answered, marking as missed:', key);
               next.set(key, 'missed_call');
-              // Clear missed call status after 1 minute
+              
+              // Persist missed call to backend
+              const { chatAPI } = require('../services/api');
+              chatAPI.markMissedCall(conversationId).catch(err => {
+                console.error('[SocketContext] Failed to persist missed call:', err);
+              });
+              
+              // Clear missed call status after 1 minute (but keep it in database)
               setTimeout(() => {
                 setCallStatuses((prev) => {
                   const next = new Map(prev);

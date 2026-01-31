@@ -4,6 +4,11 @@ import { logger } from '../utils/logger';
 import { config } from '../utils/config';
 import { FCMService } from './fcmService';
 import { APNSService } from './apnsService';
+import { EngagementService } from './engagementService';
+import { LimitService } from './limitService';
+import { MatchFilterService } from './matchFilterService';
+import { PriorityQueueService } from './priorityQueueService';
+import Redis from 'ioredis';
 import { 
   BatchNotificationJob, 
   NotificationDeliveryResult, 
@@ -16,11 +21,36 @@ export class NotificationQueueService {
   private prisma: PrismaClient;
   private fcmService: FCMService;
   private apnsService: APNSService;
+  private redis: Redis;
+  private engagementService: EngagementService;
+  private limitService: LimitService;
+  private matchFilterService: MatchFilterService;
+  private priorityQueueService: PriorityQueueService;
+  // Track last notification timestamps per user for rate-limiting/coalescing
+  private lastNotificationTs: Map<string, number> = new Map();
+  // Default rate limit for message pushes (ms)
+  private MESSAGE_RATE_LIMIT_MS: number = 15000;
 
   constructor(prisma: PrismaClient) {
     this.prisma = prisma;
     this.fcmService = new FCMService();
     this.apnsService = new APNSService();
+    
+    // Initialize Redis
+    this.redis = new Redis(config.redis.url, {
+      password: config.redis.password || undefined,
+      retryStrategy: (times) => {
+        const delay = Math.min(times * 50, 2000);
+        return delay;
+      }
+    });
+
+    // Initialize services
+    this.engagementService = new EngagementService(prisma, this.redis);
+    this.limitService = new LimitService(this.redis);
+    this.matchFilterService = new MatchFilterService();
+    this.priorityQueueService = new PriorityQueueService(this.engagementService);
+    
     this.initializeQueue();
   }
 
@@ -69,20 +99,117 @@ export class NotificationQueueService {
   }
 
   async queueNotification(job: BatchNotificationJob): Promise<void> {
-    const priority = this.getPriorityValue(job.priority);
+    // Get notification type from notification record or payload data
+    let notificationType = 'NEW_MESSAGE';
+    try {
+      const notification = await this.prisma.notification.findUnique({
+        where: { id: job.notificationId },
+        select: { type: true }
+      });
+      notificationType = notification?.type || job.payload.data?.type || 'NEW_MESSAGE';
+    } catch (error: any) {
+      // Fallback to data field
+      notificationType = job.payload.data?.type || 'NEW_MESSAGE';
+    }
     
-    await this.notificationQueue.add('send-notification', job, {
-      priority,
-      delay: 0,
-      attempts: config.notification.maxRetryAttempts
-    });
+    const isSystemNotification = notificationType === 'SYSTEM_UPDATE' || 
+                                  notificationType === 'MARKETING' || 
+                                  notificationType === 'REMINDER';
 
-    logger.info(`Notification job queued`, {
-      jobId: job.id,
-      notificationId: job.notificationId,
-      deviceCount: job.deviceTokens.length,
-      priority: job.priority
-    });
+    // Group device tokens by user
+    const tokensByUser = new Map<string, typeof job.deviceTokens>();
+    for (const token of job.deviceTokens) {
+      if (!tokensByUser.has(token.userId)) {
+        tokensByUser.set(token.userId, []);
+      }
+      tokensByUser.get(token.userId)!.push(token);
+    }
+
+    // Process each user separately for prioritization and limits
+    for (const [userId, userTokens] of tokensByUser.entries()) {
+      try {
+        // 1. Match filtering (skip for system notifications)
+        if (!isSystemNotification) {
+          const senderId = this.matchFilterService.extractSenderId(job.payload.data);
+          const shouldSend = await this.matchFilterService.shouldSendNotification(
+            notificationType,
+            userId,
+            senderId
+          );
+
+          if (!shouldSend) {
+            logger.info('Notification filtered out - users not matched', {
+              notificationId: job.notificationId,
+              userId,
+              senderId,
+              type: notificationType
+            });
+            continue; // Skip this user
+          }
+        }
+
+        // 2. Check daily limits (for calls+chats, not system notifications)
+        if (!isSystemNotification) {
+          const canSend = await this.limitService.canSendDailyNotification(userId);
+          if (!canSend) {
+            logger.info('Daily notification limit reached, skipping', {
+              notificationId: job.notificationId,
+              userId,
+              type: notificationType,
+              currentCount: await this.limitService.getDailyCount(userId)
+            });
+            
+            // Add to priority queue for later (if limit allows later)
+            await this.priorityQueueService.addToQueue(
+              job.notificationId,
+              userId,
+              job.payload,
+              Date.now()
+            );
+            continue; // Skip for now, will be processed later if queue allows
+          }
+        }
+
+        // 3. Calculate priority score
+        const priorityScore = await this.priorityQueueService.calculatePriorityScore(
+          notificationType,
+          userId,
+          Date.now()
+        );
+
+        // 4. Queue the notification with calculated priority
+        const priority = this.getPriorityValue(job.priority);
+        
+        // Create user-specific job
+        const userJob: BatchNotificationJob = {
+          ...job,
+          deviceTokens: userTokens,
+          priority: job.priority || (priorityScore > 80 ? 'HIGH' : priorityScore > 50 ? 'NORMAL' : 'LOW')
+        };
+
+        await this.notificationQueue.add('send-notification', userJob, {
+          priority,
+          delay: 0,
+          attempts: config.notification.maxRetryAttempts
+        });
+
+        logger.info(`Notification job queued with prioritization`, {
+          jobId: job.id,
+          notificationId: job.notificationId,
+          userId,
+          deviceCount: userTokens.length,
+          priority: userJob.priority,
+          priorityScore
+        });
+      } catch (error: any) {
+        logger.error('Error processing notification for user', {
+          userId,
+          notificationId: job.notificationId,
+          error: error.message
+        });
+        // Continue with other users even if one fails
+      }
+    }
   }
 
   private async processNotificationJob(job: Queue.Job<BatchNotificationJob>): Promise<NotificationDeliveryResult[]> {
@@ -98,6 +225,35 @@ export class NotificationQueueService {
     const results: NotificationDeliveryResult[] = [];
 
     try {
+      // Sanitize payload for privacy (e.g., chat pushes should not include message text)
+      const sanitizedPayload = this.sanitizePayloadForPrivacy(payload);
+
+      // Rate-limiting for message-type notifications: if a recent notification was sent to the same user,
+      // requeue the job with a delay so we avoid spamming.
+      if ((sanitizedPayload.type === 'NEW_MESSAGE' || sanitizedPayload.data?.type === 'NEW_MESSAGE') && Array.isArray(deviceTokens)) {
+        const now = Date.now();
+        let minDelay = 0;
+        const userIds = Array.from(new Set(deviceTokens.map(dt => dt.userId)));
+        for (const userId of userIds) {
+          const lastTs = this.lastNotificationTs.get(userId) || 0;
+          const elapsed = now - lastTs;
+          if (elapsed < this.MESSAGE_RATE_LIMIT_MS) {
+            const needed = this.MESSAGE_RATE_LIMIT_MS - elapsed;
+            if (needed > minDelay) minDelay = needed;
+          }
+        }
+        if (minDelay > 0) {
+          logger.info('Rate limit hit for NEW_MESSAGE notifications, requeuing job', { notificationId, jobId: job.id, delayMs: minDelay });
+          // Requeue the same job with a delay to coalesce bursts
+          await this.notificationQueue.add('send-notification', job.data, {
+            priority: job.opts?.priority,
+            delay: minDelay,
+            attempts: Math.max(1, job.attemptsMade || 1)
+          });
+          return [];
+        }
+      }
+
       // Group device tokens by platform
       const tokensByPlatform = this.groupTokensByPlatform(deviceTokens);
 
@@ -105,7 +261,7 @@ export class NotificationQueueService {
       if (tokensByPlatform.android.length > 0) {
         const androidResults = await this.sendToAndroidDevices(
           tokensByPlatform.android,
-          payload
+          sanitizedPayload
         );
         results.push(...androidResults);
       }
@@ -114,7 +270,7 @@ export class NotificationQueueService {
       if (tokensByPlatform.ios.length > 0) {
         const iosResults = await this.sendToiOSDevices(
           tokensByPlatform.ios,
-          payload
+          sanitizedPayload
         );
         results.push(...iosResults);
       }
@@ -123,7 +279,7 @@ export class NotificationQueueService {
       if (tokensByPlatform.web.length > 0) {
         const webResults = await this.sendToWebDevices(
           tokensByPlatform.web,
-          payload
+          sanitizedPayload
         );
         results.push(...webResults);
       }
@@ -133,6 +289,36 @@ export class NotificationQueueService {
 
       // Update notification statistics
       await this.updateNotificationStats(notificationId, results);
+
+      // Update limits and engagement cache after successful send
+      if (results.length > 0) {
+        const notificationType = sanitizedPayload.data?.type || sanitizedPayload.data?.notificationType || 'NEW_MESSAGE';
+        const isSystemNotification = notificationType === 'SYSTEM_UPDATE' || 
+                                     notificationType === 'MARKETING' || 
+                                     notificationType === 'REMINDER';
+        
+        const userIds = Array.from(new Set(deviceTokens.map(dt => dt.userId)));
+        const now = Date.now();
+
+        for (const userId of userIds) {
+          const userIdStr = String(userId);
+          // Update lastNotificationTs for NEW_MESSAGE
+          if (notificationType === 'NEW_MESSAGE' || sanitizedPayload.data?.type === 'NEW_MESSAGE') {
+            this.lastNotificationTs.set(userIdStr, now);
+          }
+
+          // Increment daily count for non-system notifications
+          if (!isSystemNotification) {
+            await this.limitService.incrementDailyCount(userIdStr);
+          } else {
+            // Increment weekly system count
+            await this.limitService.incrementWeeklySystemCount(userIdStr);
+          }
+
+          // Invalidate engagement cache so it recalculates
+          await this.engagementService.invalidateCache(userIdStr);
+        }
+      }
 
       return results;
 
@@ -154,6 +340,37 @@ export class NotificationQueueService {
       await this.updateDeliveryRecords(notificationId, failedResults);
       return failedResults;
     }
+  }
+
+  /**
+   * Sanitize payload to remove message text for chat pushes and enforce privacy rules.
+   * Returns a shallow-cloned sanitized payload.
+   */
+  private sanitizePayloadForPrivacy(payload: any) {
+    const p = { ...payload };
+    try {
+      const pdata: any = p.data || {};
+      const isNewMessage = p.type === 'NEW_MESSAGE' || pdata.type === 'NEW_MESSAGE' || (pdata && pdata.notificationType === 'NEW_MESSAGE');
+      if (isNewMessage) {
+        const senderName = pdata.senderName || pdata.fromName || (pdata.sender && pdata.sender.name) || 'Someone';
+        const safeBody = `${senderName} sent a message`;
+        p.body = safeBody;
+        // Platform specific overrides
+        p.iosBody = p.iosBody || safeBody;
+        p.androidBody = p.androidBody || safeBody;
+        // Remove any raw message content from data payload to avoid leaks
+        if (p.data && typeof p.data === 'object') {
+          const cleanedData = { ...(p.data as any) };
+          delete cleanedData.content;
+          delete cleanedData.message;
+          delete cleanedData.text;
+          p.data = cleanedData;
+        }
+      }
+    } catch (e) {
+      logger.warn('Failed to sanitize payload for privacy:', e);
+    }
+    return p;
   }
 
   private groupTokensByPlatform(deviceTokens: Array<{
@@ -368,6 +585,7 @@ export class NotificationQueueService {
   async shutdown(): Promise<void> {
     await this.notificationQueue.close();
     this.apnsService.shutdown();
+    await this.redis.quit();
     logger.info('Notification queue service shut down');
   }
 }

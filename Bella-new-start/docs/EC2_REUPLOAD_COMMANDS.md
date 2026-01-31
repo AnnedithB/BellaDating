@@ -19,25 +19,35 @@ aws s3 cp belle-new-start.zip s3://bella-file-transfer/belle-new-start.zip
    sudo docker compose -f /home/kindred/projects/master-be/docker-compose.yml logs -f user-service
 # Download from S3
 cd /tmp
-aws s3 cp s3://kindred-users/belle-new-start.zip ./belle-new-start.zip
+   aws s3 cp s3://bellefiletransfer/belle-new-start.zip ./belle-new-start.zip
 
-# Remove old files (using sudo since ubuntu user doesn't have direct access)
-sudo rm -rf /home/kindred/projects/master-be/*
+   # Remove old files (using sudo since ubuntu user doesn't have direct access)
+   sudo rm -rf /home/kindred/projects/master-be/*
 
-# Unzip to /tmp
-sudo unzip -o belle-new-start.zip -d /tmp
+   # Unzip to /tmp
+   sudo unzip -o belle-new-start.zip -d /tmp
 
-# Fix ownership
-sudo chown -R kindred:kindred /tmp/Bella-new-start
+   # Fix ownership
+   sudo chown -R kindred:kindred /tmp/Bella-new-start
 
-# Copy to project directory
-sudo cp -r /tmp/Bella-new-start/* /home/kindred/projects/master-be/
+   # Copy to project directory
+   sudo cp -r /tmp/Bella-new-start/* /home/kindred/projects/master-be/
 
 # Navigate and rebuild (use sudo with absolute paths)
 cd /tmp
 sudo docker compose -f /home/kindred/projects/master-be/docker-compose.yml down
 sudo docker compose -f /home/kindred/projects/master-be/docker-compose.yml up -d --build
 ```
+
+##new
+cd /tmp
+AWS_PROFILE=saoud aws s3 cp s3://bellefiletransfer/belle-new-start.zip ./belle-new-start.zip
+
+sudo rm -rf /home/kindred/projects/master-be/*
+sudo unzip -o belle-new-start.zip -d /tmp
+sudo chown -R kindred:kindred /tmp/Bella-new-start
+sudo cp -r /tmp/Bella-new-start/* /home/kindred/projects/master-be/
+
 
 ## Alternative: Work from /tmp
 
@@ -46,7 +56,7 @@ If you prefer to work from /tmp without sudo:
 ```bash
 # Download and unzip
 cd /tmp
-aws s3 cp s3://bella-file-transfer/belle-new-start.zip ./belle-new-start.zip
+aws s3 cp s3://kindred-users/belle-new-start.zip ./belle-new-start.zip
 sudo unzip -o belle-new-start.zip -d /tmp
 sudo chown -R kindred:kindred /tmp/Bella-new-start
 

@@ -422,9 +422,9 @@ export default function CallView({
             onPress={handleVideoToggle}
           >
             <Ionicons
-              name={isVideoEnabled ? 'videocam' : 'videocam-off'}
+              name={isVideoEnabled ? 'videocam' : 'videocam-outline'}
               size={20}
-              color={isVideoEnabled ? '#4CAF50' : '#999999'}
+              color={isVideoEnabled ? '#4CAF50' : '#000000'}
             />
             {videoRequestPending && (
               <View style={styles.pendingDot} />
@@ -434,7 +434,7 @@ export default function CallView({
             <Ionicons
               name={isMatched ? 'heart' : 'heart-outline'}
               size={20}
-              color={isMatched ? '#4CAF50' : '#999999'}
+              color={isMatched ? '#4CAF50' : '#000000'}
             />
             {(heartPending || incomingHeart) && <View style={styles.pendingDot} />}
           </TouchableOpacity>
@@ -693,6 +693,10 @@ const styles = StyleSheet.create({
   topIconButton: {
     padding: 8,
     position: 'relative',
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#000000',
   },
   activeTopIcon: {
     backgroundColor: 'rgba(76, 175, 80, 0.1)',

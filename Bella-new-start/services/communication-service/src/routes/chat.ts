@@ -283,7 +283,10 @@ router.get('/conversations', authenticateToken, async (req: AuthenticatedRequest
           select: {
             userId: true,
             role: true,
-            joinedAt: true
+            joinedAt: true,
+            missedCallCount: true,
+            lastMissedCallAt: true,
+            lastReadAt: true
           }
         },
         messages: {
@@ -296,7 +299,9 @@ router.get('/conversations', authenticateToken, async (req: AuthenticatedRequest
             content: true,
             messageType: true,
             timestamp: true,
-            senderId: true
+            senderId: true,
+            voiceUrl: true,
+            imageUrl: true
           }
         }
       },
@@ -320,6 +325,91 @@ router.get('/conversations', authenticateToken, async (req: AuthenticatedRequest
     logger.error('Error fetching conversations:', error);
     return res.status(500).json({
       error: 'Failed to fetch conversations',
+      details: process.env.NODE_ENV === 'development' ? (error.message || error) : undefined
+    });
+  }
+});
+
+// Mark missed call for a user in a conversation
+router.post('/conversations/:roomId/missed-call', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    const { roomId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    // Find or create UserRoom entry
+    const userRoom = await prisma.userRoom.upsert({
+      where: {
+        userId_roomId: {
+          userId: userId,
+          roomId: roomId
+        }
+      },
+      update: {
+        missedCallCount: {
+          increment: 1
+        },
+        lastMissedCallAt: new Date()
+      },
+      create: {
+        userId: userId,
+        roomId: roomId,
+        missedCallCount: 1,
+        lastMissedCallAt: new Date()
+      }
+    });
+
+    // Update room last activity
+    await prisma.chatRoom.update({
+      where: { roomId },
+      data: { lastActivity: new Date() }
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        missedCallCount: userRoom.missedCallCount,
+        lastMissedCallAt: userRoom.lastMissedCallAt
+      }
+    });
+  } catch (error: any) {
+    logger.error('Error marking missed call:', error);
+    return res.status(500).json({
+      error: 'Failed to mark missed call',
+      details: process.env.NODE_ENV === 'development' ? (error.message || error) : undefined
+    });
+  }
+});
+
+// Clear missed calls for a user in a conversation
+router.delete('/conversations/:roomId/missed-call', authenticateToken, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const userId = req.user?.userId;
+    const { roomId } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({ error: 'User not authenticated' });
+    }
+
+    await prisma.userRoom.updateMany({
+      where: {
+        userId: userId,
+        roomId: roomId
+      },
+      data: {
+        missedCallCount: 0,
+        lastMissedCallAt: null
+      }
+    });
+
+    return res.json({ success: true });
+  } catch (error: any) {
+    logger.error('Error clearing missed calls:', error);
+    return res.status(500).json({
+      error: 'Failed to clear missed calls',
       details: process.env.NODE_ENV === 'development' ? (error.message || error) : undefined
     });
   }

@@ -46,3 +46,8 @@ coverage/
 # Misc
 *.bak
 *.tmp
+
+# Notification service keys (DO NOT COMMIT)
+services/notification-service/*.p8
+services/notification-service/*firebase*.json
+services/notification-service/*-firebase-adminsdk-*.json

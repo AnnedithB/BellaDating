@@ -9,6 +9,9 @@ import { config } from './utils/config';
 import notificationRoutes from './routes/notifications';
 import { NotificationQueueService } from './services/queueService';
 import { MatchNotificationListener } from './services/matchNotificationListener';
+import { SystemNotificationScheduler } from './services/systemNotificationScheduler';
+import Redis from 'ioredis';
+import { LimitService } from './services/limitService';
 
 // Load environment variables
 dotenv.config();
@@ -17,6 +20,18 @@ const app = express();
 const prisma = new PrismaClient();
 const queueService = new NotificationQueueService(prisma);
 const matchNotificationListener = new MatchNotificationListener(prisma, queueService);
+
+// Initialize Redis for limit service
+const redis = new Redis(config.redis.url, {
+  password: config.redis.password || undefined,
+  retryStrategy: (times) => {
+    const delay = Math.min(times * 50, 2000);
+    return delay;
+  }
+});
+
+const limitService = new LimitService(redis);
+const systemNotificationScheduler = new SystemNotificationScheduler(prisma, queueService, limitService);
 
 // Middleware
 app.use(helmet());
@@ -203,8 +218,14 @@ process.on('SIGTERM', async () => {
   // Stop match notification listener
   await matchNotificationListener.stop();
   
+  // Stop system notification scheduler
+  systemNotificationScheduler.stop();
+  
   // Close database connections
   await prisma.$disconnect();
+  
+  // Close Redis connection
+  await redis.quit();
   
   process.exit(0);
 });
@@ -215,8 +236,14 @@ process.on('SIGINT', async () => {
   // Stop match notification listener
   await matchNotificationListener.stop();
   
+  // Stop system notification scheduler
+  systemNotificationScheduler.stop();
+  
   // Close database connections
   await prisma.$disconnect();
+  
+  // Close Redis connection
+  await redis.quit();
   
   process.exit(0);
 });
@@ -249,5 +276,16 @@ app.listen(PORT, async () => {
     });
     logger.error('Failed to start match notification listener:', error);
     // Don't exit - service can still function without match notifications
+  }
+
+  // Start system notification scheduler
+  try {
+    systemNotificationScheduler.start();
+    console.log('[NotificationService] System notification scheduler started successfully');
+    logger.info('System notification scheduler started successfully');
+  } catch (error: any) {
+    console.error('[NotificationService] Failed to start system notification scheduler:', error);
+    logger.error('Failed to start system notification scheduler:', error);
+    // Don't exit - service can still function without system notifications
   }
 });

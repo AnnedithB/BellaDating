@@ -71,9 +71,9 @@ const ChatItem = ({ item, onPress, onDelete }) => {
               ? 'typing...'
               : item.callStatus === 'receiving_call'
               ? 'receiving a call'
-              : item.callStatus === 'missed_call'
-              ? 'missed a call'
-              : item.statusText || item.lastMessage}
+              : item.callStatus === 'missed_call' || (item.missedCallCount > 0 && item.statusText)
+              ? item.statusText || 'missed a call'
+              : item.statusText || item.lastMessage || ''}
           </Text>
           <UnreadBadge count={item.unread} />
         </View>

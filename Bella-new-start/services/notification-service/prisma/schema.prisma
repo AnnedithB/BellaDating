@@ -184,6 +184,16 @@ model NotificationAnalytics {
   @@map("notification_analytics")
 }
 
+model SystemNotificationSent {
+  id           String   @id @default(cuid())
+  userId       String
+  daysInactive Int
+  sentAt       DateTime @default(now())
+  
+  @@index([userId, sentAt])
+  @@map("system_notifications_sent")
+}
+
 enum Platform {
   IOS
   ANDROID

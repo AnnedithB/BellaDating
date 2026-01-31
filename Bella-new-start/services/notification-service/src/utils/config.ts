@@ -75,5 +75,19 @@ export const config = {
   template: {
     cacheTtl: parseInt(process.env.TEMPLATE_CACHE_TTL || '3600'),
     imageCacheTtl: parseInt(process.env.IMAGE_CACHE_TTL || '86400')
+  },
+  
+  // Notification prioritization and limits
+  prioritization: {
+    dailyLimitMin: parseInt(process.env.DAILY_NOTIFICATION_LIMIT_MIN || '5'),
+    dailyLimitMax: parseInt(process.env.DAILY_NOTIFICATION_LIMIT_MAX || '10'),
+    weeklySystemLimit: parseInt(process.env.WEEKLY_SYSTEM_NOTIFICATION_LIMIT || '4'),
+    peakTimeStart: parseInt(process.env.PEAK_TIME_START || '18'), // 6 PM
+    peakTimeEnd: parseInt(process.env.PEAK_TIME_END || '22'), // 10 PM
+    engagement: {
+      messageWeight: parseInt(process.env.ENGAGEMENT_MESSAGE_WEIGHT || '1'),
+      callWeight: parseInt(process.env.ENGAGEMENT_CALL_WEIGHT || '3'), // Calls weighted 3x
+      cacheTTL: parseInt(process.env.ENGAGEMENT_CACHE_TTL || '3600') // 1 hour
+    }
   }
 };

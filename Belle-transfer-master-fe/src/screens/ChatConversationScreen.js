@@ -151,6 +151,9 @@ const ChatConversationScreen = ({ route }) => {
     subscribeToCallRequests,
     emitCallRequest,
     emitCallResponse,
+    pendingCallRequest,
+    clearPendingCallRequest,
+    callStatuses,
   } = useSocket();
   const {
     chatId,
@@ -609,6 +612,13 @@ const ChatConversationScreen = ({ route }) => {
       chatAPI.markSessionAsRead(chatId).catch(console.error);
     }
 
+    // Clear missed calls when conversation is opened (for room-based chats)
+    if (activeConversationId && shouldUseRoomMessages) {
+      chatAPI.clearMissedCalls(activeConversationId).catch(err => {
+        console.warn('[ChatConversationScreen] Failed to clear missed calls:', err);
+      });
+    }
+
     // Join the conversation room(s) via Socket.IO using roomId and sessionId
     const socketRoomId = activeConversationId;
     if (socketConnected) {
@@ -799,6 +809,92 @@ const ChatConversationScreen = ({ route }) => {
     };
   }, [socketConnected, activeConversationId, roomId, chatId, sessionId, actualOtherUserId, subscribeToCallRequests]);
 
+  // If there was a pending call request received before this screen mounted,
+  // ensure we pick it up so the header shows accept/decline buttons.
+  useEffect(() => {
+    if (!pendingCallRequest) return;
+
+    console.log('[ChatConversationScreen] Checking pendingCallRequest on mount:', pendingCallRequest);
+
+    const data = pendingCallRequest;
+    const isForThisConversation =
+      data.conversationId === activeConversationId ||
+      data.conversationId === roomId ||
+      data.conversationId === chatId ||
+      data.sessionId === chatId ||
+      data.sessionId === sessionId ||
+      (data.callerId === actualOtherUserId && data.callType === 'VOICE');
+
+    const isVoiceCall = data.callType === 'VOICE' || data.type === 'VOICE';
+
+    if (isForThisConversation && isVoiceCall) {
+      console.log('[ChatConversationScreen] Pending call request applies to this conversation, setting incomingCallRequest state');
+      setIncomingCallRequest(data);
+      // Clear the global pending call to avoid duplicate handling elsewhere
+      try {
+        clearPendingCallRequest();
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [pendingCallRequest, activeConversationId, roomId, chatId, sessionId, actualOtherUserId, clearPendingCallRequest]);
+
+  // Clear incomingCallRequest if call status for that conversation/caller is no longer 'receiving_call'
+  useEffect(() => {
+    if (!incomingCallRequest) return;
+
+    try {
+      const data = incomingCallRequest;
+      const conversationId = data.conversationId || data.sessionId || activeConversationId || roomId || chatId;
+      const key = `${conversationId}:${data.callerId}`;
+      const status = callStatuses && callStatuses.get ? callStatuses.get(key) : undefined;
+      console.log('[ChatConversationScreen] Checking callStatuses for key:', key, 'status:', status);
+      if (!status || status !== 'receiving_call') {
+        console.log('[ChatConversationScreen] Clearing incomingCallRequest because call status is', status);
+        setIncomingCallRequest(null);
+        try {
+          clearPendingCallRequest();
+        } catch (e) {
+          // ignore
+        }
+      }
+    } catch (err) {
+      console.warn('[ChatConversationScreen] Error while checking callStatuses to clear incomingCallRequest:', err);
+    }
+  }, [callStatuses, incomingCallRequest, activeConversationId, roomId, chatId, clearPendingCallRequest]);
+
+  // Keep incoming call controls visible for at least the caller timeout (30s)
+  useEffect(() => {
+    if (!incomingCallRequest) {
+      if (incomingCallTimeoutRef.current) {
+        clearTimeout(incomingCallTimeoutRef.current);
+        incomingCallTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    // Ensure banner stays up for at least 30s (match caller timeout) unless user accepts/declines
+    if (incomingCallTimeoutRef.current) {
+      clearTimeout(incomingCallTimeoutRef.current);
+    }
+    incomingCallTimeoutRef.current = setTimeout(() => {
+      console.log('[ChatConversationScreen] Incoming call banner timeout reached (30s), clearing incomingCallRequest');
+      setIncomingCallRequest(null);
+      try {
+        clearPendingCallRequest();
+      } catch (e) {
+        // ignore
+      }
+    }, 30000);
+
+    return () => {
+      if (incomingCallTimeoutRef.current) {
+        clearTimeout(incomingCallTimeoutRef.current);
+        incomingCallTimeoutRef.current = null;
+      }
+    };
+  }, [incomingCallRequest, clearPendingCallRequest]);
+
   // Handle accept call
   const handleAcceptCall = () => {
     if (!incomingCallRequest) return;
@@ -835,6 +931,7 @@ const ChatConversationScreen = ({ route }) => {
 
   // Timeout ref for call response
   const callResponseTimeoutRef = useRef(null);
+  const incomingCallTimeoutRef = useRef(null);
 
   // Listen for call responses (accept/decline/ignore)
   useEffect(() => {
@@ -937,8 +1034,8 @@ const ChatConversationScreen = ({ route }) => {
               // If it doesn't exist, createAndSendOffer will handle it gracefully
               await webrtcService.createAndSendOffer(targetId);
               console.log('[ChatConversationScreen] Offer created and sent successfully');
-              // Update status to connected after offer is sent
-              setCallStatus('connected');
+              // Update status to calling after offer is sent (connected will be set when remote stream arrives)
+              setCallStatus('calling');
             } catch (err) {
               console.error('[ChatConversationScreen] Error creating offer:', err);
               // If peer connection doesn't exist, try creating it first
@@ -977,12 +1074,21 @@ const ChatConversationScreen = ({ route }) => {
       // Set timeout when we're in calling/ringing state (waiting for response)
       // This applies to the caller who is waiting for the callee to respond
       if (isInCall && callSession && (callStatus === 'calling' || callStatus === 'ringing')) {
-        console.log('[ChatConversationScreen] Setting timeout for call response (7 seconds)');
+        console.log('[ChatConversationScreen] Setting timeout for call response (30 seconds)');
         callResponseTimeoutRef.current = setTimeout(() => {
-          console.log('[ChatConversationScreen] No response received after 7 seconds, auto-cleaning up call');
+          console.log('[ChatConversationScreen] No response received after 30 seconds, auto-cleaning up call');
           const isVoiceCallFromChat = callSession?.callType === 'VOICE' && chatId;
+          // Notify remote party that we're timing out (ignore)
+          try {
+            if (emitCallResponse && callSession?.id) {
+              console.log('[ChatConversationScreen] Emitting ignore response due to timeout for callSession:', callSession.id);
+              emitCallResponse(callSession.id, 'ignore');
+            }
+          } catch (e) {
+            console.warn('[ChatConversationScreen] Failed to emit ignore response on timeout', e);
+          }
           cleanupVideoCall(!isVoiceCallFromChat); // Only navigate if not voice call from chat
-        }, 7000); // Match receiver's 7 second timeout
+        }, 30000); // Increase caller timeout to 30 seconds
 
       return () => {
         if (callResponseTimeoutRef.current) {
@@ -1589,36 +1695,16 @@ const ChatConversationScreen = ({ route }) => {
         </View>
       </View>
       <View style={styles.headerRight}>
-        {incomingCallRequest ? (
-          // Show accept/decline buttons when receiving a call
-          <View style={styles.incomingCallButtons}>
-            <TouchableOpacity
-              style={[styles.callActionButton, styles.declineButton]}
-              onPress={handleDeclineCall}
-            >
-              <Ionicons name="close" size={18} color="#FF4444" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.callActionButton, styles.acceptButton]}
-              onPress={handleAcceptCall}
-            >
-              <Ionicons name="checkmark" size={18} color="#4CAF50" />
-            </TouchableOpacity>
-          </View>
-        ) : (
-          // Show normal header buttons when not receiving a call
-          <>
-            <TouchableOpacity
-              style={styles.headerButton}
-              onPress={() => handleStartVoiceCall(false)}
-            >
-              <Ionicons name="call-outline" size={24} color={colors.textPrimary} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.headerButton} onPress={handleMenuPress}>
-              <Ionicons name="ellipsis-vertical-outline" size={24} color={colors.textPrimary} />
-            </TouchableOpacity>
-          </>
-        )}
+        {/* Always show normal header buttons; incoming call controls are in-banner */}
+        <TouchableOpacity
+          style={styles.headerButton}
+          onPress={() => handleStartVoiceCall(false)}
+        >
+          <Ionicons name="call-outline" size={24} color={colors.textPrimary} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.headerButton} onPress={handleMenuPress}>
+          <Ionicons name="ellipsis-vertical-outline" size={24} color={colors.textPrimary} />
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -1926,6 +2012,20 @@ const ChatConversationScreen = ({ route }) => {
   return (
     <SafeAreaView style={styles.container}>
       {renderHeader()}
+      {/* In-chat incoming call banner (redundant to header buttons but more visible) */}
+      {incomingCallRequest && !isInCall && (
+        <View style={styles.incomingBanner}>
+          <Text style={styles.incomingBannerText}>Incoming call from {displayChatName || 'User'}</Text>
+          <View style={styles.incomingBannerActions}>
+            <TouchableOpacity style={[styles.callActionButton, styles.declineButton]} onPress={handleDeclineCall}>
+              <Ionicons name="close" size={18} color="#FF4444" />
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.callActionButton, styles.acceptButton]} onPress={handleAcceptCall}>
+              <Ionicons name="checkmark" size={18} color="#4CAF50" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       <View style={styles.messagesContainer}>
         <FlatList
@@ -2125,6 +2225,26 @@ const styles = StyleSheet.create({
   incomingCallButtons: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+  },
+  incomingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#FFF8E1',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.lightGray,
+  },
+  incomingBannerText: {
+    color: '#333',
+    fontSize: 14,
+    flex: 1,
+    marginRight: 12,
+  },
+  incomingBannerActions: {
+    flexDirection: 'row',
     gap: 8,
   },
   callActionButton: {

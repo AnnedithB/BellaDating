@@ -59,11 +59,29 @@ export default function ChatsScreen({ navigation }) {
 
       console.log('[ChatsScreen] Loaded sessions:', sessionsData?.length || 0);
       console.log('[ChatsScreen] Loaded conversations:', conversationsData?.length || 0);
+      // Debug: print a small sample of conversations to inspect message shapes
+      try {
+        const sample = (conversationsData || []).slice(0, 5).map((c) => ({
+          id: c.id,
+          roomId: c.roomId,
+          lastActivity: c.lastActivity,
+          messagesCount: Array.isArray(c.messages) ? c.messages.length : 0,
+          messagesSample: (c.messages || []).slice(0, 1),
+        }));
+        // Stringify to ensure collapsed objects are visible in console output
+        console.log('[ChatsScreen] Raw conversations sample (stringified):\n' + JSON.stringify(sample, null, 2));
+      } catch (e) {
+        console.warn('[ChatsScreen] Failed to stringify conversationsData for debug', e);
+      }
 
       // Transform sessions to chat format
       const sessionChats = (sessionsData || []).map((session) => {
         // Determine which user is the other person
         const otherUser = session.user1Id === user?.id ? session.user2 : session.user1;
+        
+        // Try to get last message from session if available
+        const lastMessage = session.lastMessage || session.messages?.[0];
+        const previewText = lastMessage ? formatMessagePreview(lastMessage) : '';
 
         return {
           id: session.id,
@@ -71,7 +89,7 @@ export default function ChatsScreen({ navigation }) {
           roomId: session.metadata?.roomId || null,
           name: otherUser?.name || otherUser?.email?.split('@')[0] || 'Unknown',
           profilePicture: otherUser?.profilePicture,
-          lastMessage: '',
+          lastMessage: previewText,
           time: formatTimeAgo(session.startedAt),
           unread: 0,
           isOnline: otherUser?.isOnline || false,
@@ -112,6 +130,32 @@ export default function ChatsScreen({ navigation }) {
         const lastMessage = conv.messages?.[0];
         // Get profile from fetched profiles
         const otherUserProfile = userProfiles[otherUserId] || {};
+        
+        // Get user's participant data to check for missed calls
+        const userParticipant = conv.participants?.find(p => p.userId === user?.id);
+        const missedCallCount = userParticipant?.missedCallCount || 0;
+        const lastMissedCallAt = userParticipant?.lastMissedCallAt;
+        
+        // Determine preview text based on activity
+        let previewText = '';
+        let statusText = '';
+        
+        // Check if there's a missed call (and it's more recent than last message)
+        if (missedCallCount > 0 && lastMissedCallAt) {
+          const missedCallTime = new Date(lastMissedCallAt);
+          const lastMessageTime = lastMessage?.timestamp ? new Date(lastMessage.timestamp) : null;
+          
+          // Show missed call if it's the most recent activity or if there's no message
+          if (!lastMessageTime || missedCallTime > lastMessageTime) {
+            statusText = missedCallCount === 1 ? 'missed a call' : `missed ${missedCallCount} calls`;
+          } else {
+            // There's a more recent message, show that instead
+            previewText = formatMessagePreview(lastMessage);
+          }
+        } else if (lastMessage) {
+          // No missed calls, show last message preview
+          previewText = formatMessagePreview(lastMessage);
+        }
 
         return {
           id: conv.roomId || conv.id,
@@ -119,13 +163,16 @@ export default function ChatsScreen({ navigation }) {
           roomId: conv.roomId,
           name: otherUserProfile.name || otherUserProfile.displayName || otherUserProfile.email?.split('@')[0] || 'Unknown User',
           profilePicture: otherUserProfile.profilePicture || null,
-          lastMessage: lastMessage?.content || '',
-          time: formatTimeAgo(conv.lastActivity || lastMessage?.timestamp || conv.createdAt),
+          lastMessage: previewText,
+          statusText: statusText,
+          time: formatTimeAgo(conv.lastActivity || lastMessage?.timestamp || lastMissedCallAt || conv.createdAt),
           unread: 0,
           isOnline: otherUserProfile.isOnline || false,
           otherUserId: otherUserId,
           startedAt: conv.createdAt,
           isActive: false,
+          missedCallCount: missedCallCount,
+          lastMissedCallAt: lastMissedCallAt,
         };
       });
 
@@ -140,12 +187,27 @@ export default function ChatsScreen({ navigation }) {
 
       // Add session chats (higher priority - overwrites conversations)
       // Keep the conversation roomId when available so both users join the same chat room.
+      // However, prefer the conversation's lastMessage/statusText if the session chat doesn't have them.
       sessionChats.forEach((chat) => {
         if (!chat.otherUserId) return;
         const existing = chatMap.get(chat.otherUserId);
         if (existing?.roomId && existing.roomId !== chat.roomId) {
           chat.roomId = existing.roomId;
         }
+
+        // If session chat has no preview but conversation had one, preserve it
+        if ((!chat.lastMessage || chat.lastMessage === '') && existing?.lastMessage) {
+          chat.lastMessage = existing.lastMessage;
+        }
+        if ((!chat.statusText || chat.statusText === '') && existing?.statusText) {
+          chat.statusText = existing.statusText;
+        }
+
+        // Preserve startedAt if session chat doesn't have a better timestamp
+        if (!chat.startedAt && existing?.startedAt) {
+          chat.startedAt = existing.startedAt;
+        }
+
         chatMap.set(chat.otherUserId, chat);
       });
 
@@ -153,6 +215,24 @@ export default function ChatsScreen({ navigation }) {
       let chats = Array.from(chatMap.values()).sort((a, b) => {
         return new Date(b.startedAt) - new Date(a.startedAt);
       });
+
+      // Debug: show final prepared chats (first 5) to confirm previews propagated
+      try {
+        console.log(
+          '[ChatsScreen] Final chats prepared (stringified):\n' +
+            JSON.stringify(chats.slice(0, 5).map((c) => ({
+              id: c.id,
+              roomId: c.roomId,
+              name: c.name,
+              lastMessage: c.lastMessage,
+              statusText: c.statusText,
+              startedAt: c.startedAt,
+              missedCallCount: c.missedCallCount,
+            })), null, 2)
+        );
+      } catch (e) {
+        console.warn('[ChatsScreen] Failed to stringify final chats for debug', e);
+      }
 
       // Add typing status and call status to each chat
       chats = chats.map((chat) => {
@@ -237,6 +317,43 @@ export default function ChatsScreen({ navigation }) {
     if (diffDays < 7) return `${diffDays}d ago`;
 
     return date.toLocaleDateString();
+  };
+
+  // Format message preview based on message type
+  const formatMessagePreview = (message) => {
+    if (!message) return '';
+
+    // Normalize fields from different backend shapes
+    const messageType = message.messageType || message.type || message.message_type || 'TEXT';
+    const content =
+      message.content ??
+      message.text ??
+      message.body ??
+      message.message ??
+      (message.payload && message.payload.content) ??
+      (message.data && message.data.content) ??
+      '';
+
+    // Shorten and trim content for preview
+    const normalizedContent = String(content).replace(/\s+/g, ' ').trim();
+
+    switch (String(messageType).toUpperCase()) {
+      case 'VOICE':
+        return '🎤 Voice message';
+      case 'IMAGE':
+        return '📷 Photo';
+      case 'FILE':
+        return '📎 File';
+      case 'LOCATION':
+        return '📍 Location';
+      case 'STICKER':
+        return '🎨 Sticker';
+      case 'EMOJI':
+        return normalizedContent || '😊';
+      case 'TEXT':
+      default:
+        return normalizedContent || '';
+    }
   };
 
   // Load on mount

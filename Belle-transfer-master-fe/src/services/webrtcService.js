@@ -95,6 +95,7 @@ let remoteStream = null;
 let pendingIceCandidates = [];
 let isNegotiating = false;
 let currentUserId = null; // Store current user ID to determine offerer
+let pendingAnswers = [];
 
 // Callbacks
 let onLocalStreamCallback = null;
@@ -321,6 +322,26 @@ export const createAndSendOffer = async (userId) => {
     await peerConnection.setLocalDescription(offer);
     console.log('Local description set, signaling state:', peerConnection.signalingState);
 
+    // If any answers were queued while we were not ready, apply them now
+    if (pendingAnswers.length > 0) {
+      try {
+        for (const ans of pendingAnswers) {
+          try {
+            if (peerConnection.signalingState === 'have-local-offer' || peerConnection.signalingState === 'have-local-pranswer') {
+              await peerConnection.setRemoteDescription(ans);
+              console.log('Applied queued answer after setting local description');
+            } else {
+              console.warn('Skipping queued answer because signalingState is', peerConnection.signalingState);
+            }
+          } catch (err) {
+            console.warn('Failed to apply queued answer:', err);
+          }
+        }
+      } finally {
+        pendingAnswers = [];
+      }
+    }
+
     sendWebRTCSignal({
       type: 'offer',
       sdp: offer.sdp,
@@ -417,9 +438,16 @@ const handleAnswer = async (signal) => {
       type: 'answer',
       sdp: signal.sdp,
     });
-
-    await peerConnection.setRemoteDescription(remoteDesc);
-    console.log('Remote description set');
+    // Only set remote answer when we are in the correct signaling state
+    // (have-local-offer or have-local-pranswer). If not, queue the answer and apply later.
+    const state = peerConnection.signalingState;
+    if (state === 'have-local-offer' || state === 'have-local-pranswer') {
+      await peerConnection.setRemoteDescription(remoteDesc);
+      console.log('Remote description set');
+    } else {
+      console.warn('Received answer while signalingState is', state, '- queuing answer for later');
+      pendingAnswers.push(remoteDesc);
+    }
   } catch (error) {
     console.error('Error handling answer:', error);
     throw error;

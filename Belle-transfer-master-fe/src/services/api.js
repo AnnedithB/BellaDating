@@ -1160,6 +1160,60 @@ export const chatAPI = {
     return data.deleteMessage;
   },
 
+  async markMissedCall(roomId) {
+    const token = await tokenStorage.getToken();
+    if (!token) {
+      throw new Error('No authentication token found. Please log in again.');
+    }
+
+    const response = await fetch(
+      `${config.COMMUNICATION_SERVICE_URL}/api/chat/conversations/${roomId}/missed-call`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn(`Failed to mark missed call: ${response.status} ${errorText}`);
+      return null;
+    }
+
+    const json = await response.json();
+    return json.data;
+  },
+
+  async clearMissedCalls(roomId) {
+    const token = await tokenStorage.getToken();
+    if (!token) {
+      throw new Error('No authentication token found. Please log in again.');
+    }
+
+    const response = await fetch(
+      `${config.COMMUNICATION_SERVICE_URL}/api/chat/conversations/${roomId}/missed-call`,
+      {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn(`Failed to clear missed calls: ${response.status} ${errorText}`);
+      return null;
+    }
+
+    const json = await response.json();
+    return json;
+  },
+
   /**
    * Upload a voice note to the server
    * @param {string} fileUri - Local URI of the recorded audio file
@@ -1376,6 +1430,34 @@ export const notificationAPI = {
 
     const data = await graphqlClient.request(query, { limit, offset }, true);
     return data.notifications;
+  },
+
+  async registerDeviceToken(tokenData) {
+    // tokenData: { userId, token, platform, appVersion, deviceModel, osVersion }
+    try {
+      const token = await tokenStorage.getToken();
+      const headers = {
+        'Content-Type': 'application/json'
+      };
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const response = await fetch(`${config.notificationServiceUrl}/device-tokens`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(tokenData)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to register device token: ${response.status} ${errorText}`);
+      }
+
+      const json = await response.json();
+      return json;
+    } catch (error) {
+      console.warn('[notificationAPI.registerDeviceToken] Error:', error);
+      throw error;
+    }
   },
 
   async getUnreadNotifications() {
